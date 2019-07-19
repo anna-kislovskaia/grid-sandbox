@@ -13,6 +13,7 @@
 		<junit.version>4.12</junit.version>
 		<jsr305.version>3.0.1</jsr305.version>
 		<spring.boot.version>1.5.0.RELEASE</spring.boot.version>
+		<spring.version>4.3.18.RELEASE</spring.version>
 		<lombok.version>1.16.18</lombok.version>
 		<jackson.version>2.9.7</jackson.version>
 		<swagger.version>2.9.2</swagger.version>
