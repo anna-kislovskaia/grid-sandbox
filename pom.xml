@@ -19,6 +19,7 @@
 		<swagger.version>2.9.2</swagger.version>
 		<aop.version>1.9.2</aop.version>
 		<ignite.version>2.7.5</ignite.version>
+		<javax.cache.version>javax.cache.version</javax.cache.version>
 	</properties>
 
     <modules>

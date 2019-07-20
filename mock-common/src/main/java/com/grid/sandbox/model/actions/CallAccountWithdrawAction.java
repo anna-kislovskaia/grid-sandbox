@@ -1,5 +1,6 @@
-package com.grid.sandbox.model;
+package com.grid.sandbox.model.actions;
 
+import com.grid.sandbox.model.actions.CallAccountAction;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;

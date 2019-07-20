@@ -12,12 +12,12 @@ import org.springframework.context.annotation.Configuration;
 import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_CACHE;
 
 @Configuration
-public class MockServerConfig {
+public class MockAutoClientConfig {
 
     @Bean
     public Ignite igniteInstance() {
         IgniteConfiguration cfg = new IgniteConfiguration();
-        cfg.setIgniteInstanceName("mock-server-node");
+        cfg.setIgniteInstanceName("mock-blotter-node");
         CacheConfiguration callAccounts = new CacheConfiguration<Long, CallAccount>(CALL_ACCOUNT_CACHE)
                 .setIndexedTypes(String.class, CallAccount.class)
                 .setCacheMode(CacheMode.REPLICATED);
