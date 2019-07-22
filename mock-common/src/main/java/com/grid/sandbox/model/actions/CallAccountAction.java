@@ -8,4 +8,10 @@ public interface CallAccountAction extends Serializable {
     }
 
     Type getType();
+
+    String getActionId();
+
+    String getAccountId();
+
+    long getTimestamp();
 }

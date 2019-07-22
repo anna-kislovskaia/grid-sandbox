@@ -11,6 +11,10 @@ public class CallAccountAutoRollAction implements CallAccountAction {
     private final String accountId;
     @Getter
     private final boolean autoroll;
+    @Getter
+    private final String actionId;
+    @Getter
+    private final long timestamp;
 
     @Override
     public Type getType() {
