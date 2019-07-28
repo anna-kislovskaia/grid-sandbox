@@ -8,6 +8,8 @@ import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.IgniteMessaging;
 import org.apache.ignite.cache.query.ContinuousQuery;
+import org.apache.ignite.lang.IgniteFuture;
+import org.apache.ignite.lang.IgniteInClosure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,18 +47,8 @@ public class MockEventTracker {
         query.setLocalListener((Iterable<CacheEntryEvent<? extends String, ? extends CallAccount>> iterable) -> {
             long time = System.currentTimeMillis();
             for (CacheEntryEvent<? extends String, ? extends CallAccount> event : iterable) {
-                CallAccount account = cache.get(event.getKey());
-                if (account != null) {
-                    account.getActions().forEach(action -> {
-                        CallAccountAction sentAction = sentActions.remove(action.getActionId());
-                        if (sentAction != null) {
-                            actionCount.incrementAndGet();
-                            totalTime.addAndGet(time - action.getTimestamp());
-                        }
-                    });
-                } else {
-                    logger.info("Update: type=" + event.getEventType() + " value=" + event.getValue().toString() + " local=false");
-                }
+                cache.getAsync(event.getKey()).listen(new AccountListener(time));
+                logger.info("Update: type=" + event.getEventType() + " value=" + event.getValue().toString() + " local=false");
             }
             long count = actionCount.get();
             logger.info("Unprocessed action count: " + sentActions.size() +
@@ -77,7 +69,7 @@ public class MockEventTracker {
         IgniteMessaging rmtMsg = ignite.message(ignite.cluster().forRemotes());
         List<Callable<Void>> actions = new ArrayList<>();
         Random random = new Random();
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 10000; i++) {
             String accountId = "account-" + (i % 1000);
             BigDecimal amount = new BigDecimal(random.nextDouble() * 1000).setScale(2, BigDecimal.ROUND_HALF_UP);
             CallAccountAction.Type type = random.nextInt() % 2 == 0 ? CallAccountAction.Type.WITHDRAW : CallAccountAction.Type.INCREASE;
@@ -90,6 +82,28 @@ public class MockEventTracker {
             });
         }
         return actions;
+    }
+
+    private class AccountListener implements IgniteInClosure<IgniteFuture<CallAccount>> {
+        private final long time;
+
+        public AccountListener(long time) {
+            this.time = time;
+        }
+
+        @Override
+        public void apply(IgniteFuture<CallAccount> accountFuture) {
+            CallAccount account = accountFuture.get();
+            if (account != null) {
+                account.getActions().forEach(action -> {
+                    CallAccountAction sentAction = sentActions.remove(action.getActionId());
+                    if (sentAction != null) {
+                        actionCount.incrementAndGet();
+                        totalTime.addAndGet(time - action.getTimestamp());
+                    }
+                });
+            }
+        }
     }
 
 }
