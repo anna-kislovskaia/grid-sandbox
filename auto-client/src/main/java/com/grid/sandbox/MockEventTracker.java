@@ -19,9 +19,7 @@ import javax.annotation.PostConstruct;
 import javax.cache.event.CacheEntryEvent;
 import java.math.BigDecimal;
 import java.util.*;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -34,22 +32,30 @@ public class MockEventTracker {
     private static final Logger logger = LoggerFactory.getLogger(MockEventTracker.class);
     private AtomicLong totalTime = new AtomicLong();
     private AtomicInteger actionCount = new AtomicInteger();
+    private final ConcurrentSkipListSet<String> callAccountKeys = new ConcurrentSkipListSet<>();
+    private final CountDownLatch latch = new CountDownLatch(1);
 
     @Autowired
     private Ignite ignite;
 
     @PostConstruct
-    private void init() {
+    private void init() throws InterruptedException {
         IgniteCache<String, CallAccount> cache = ignite.getOrCreateCache(CALL_ACCOUNT_CACHE);
 
         logger.info("Create query");
         ContinuousQuery<String, CallAccount> query = new ContinuousQuery<>();
         query.setLocalListener((Iterable<CacheEntryEvent<? extends String, ? extends CallAccount>> iterable) -> {
+            if (latch.getCount() == 0) {
+                return;
+            }
             long time = System.currentTimeMillis();
+            Set<String> accountKeys = new HashSet<>();
             for (CacheEntryEvent<? extends String, ? extends CallAccount> event : iterable) {
-                cache.getAsync(event.getKey()).listen(new AccountListener(time));
+                accountKeys.add(event.getKey());
                 logger.info("Update: type=" + event.getEventType() + " value=" + event.getValue().toString() + " local=false");
             }
+            callAccountKeys.addAll(accountKeys);
+            cache.getAllAsync(accountKeys).listen(new AccountListener(time));
             long count = actionCount.get();
             logger.info("Unprocessed action count: " + sentActions.size() +
                     " total time=" + totalTime.get() +
@@ -62,21 +68,27 @@ public class MockEventTracker {
         CallAccount account = cache.getAsync("account-1").get();
         logger.info("get 1st async: " + account);
 
-        ForkJoinPool.commonPool().invokeAll(generateAccountUpdates());
+        ForkJoinPool.commonPool().invokeAll(generateAccountUpdates(2000));
+
+        latch.await();
     }
 
-    private Collection<? extends Callable<Void>> generateAccountUpdates() {
+    public Set<String> getCallAccountKeys() {
+        return Collections.unmodifiableSet(callAccountKeys);
+    }
+
+    public Collection<? extends Callable<Void>> generateAccountUpdates(int count) {
         IgniteMessaging rmtMsg = ignite.message(ignite.cluster().forRemotes());
         List<Callable<Void>> actions = new ArrayList<>();
         Random random = new Random();
-        for (int i = 0; i < 10000; i++) {
+        for (int i = 0; i < count; i++) {
             String accountId = "account-" + (i % 1000);
             BigDecimal amount = new BigDecimal(random.nextDouble() * 1000).setScale(2, BigDecimal.ROUND_HALF_UP);
             CallAccountAction.Type type = random.nextInt() % 2 == 0 ? CallAccountAction.Type.WITHDRAW : CallAccountAction.Type.INCREASE;
+            CallAccountAction action = new CallAccountBalanceAction(type, accountId, amount, UUID.randomUUID().toString(), System.currentTimeMillis());
+            sentActions.put(action.getActionId(), action);
             actions.add(() -> {
-                CallAccountAction action = new CallAccountBalanceAction(type, accountId, amount, UUID.randomUUID().toString(), System.currentTimeMillis());
                 logger.info("Sending account action " + action);
-                sentActions.put(action.getActionId(), action);
                 rmtMsg.sendOrdered(CALL_ACCOUNT_ACTION_TOPIC, action, 0);
                 return null;
             });
@@ -84,7 +96,7 @@ public class MockEventTracker {
         return actions;
     }
 
-    private class AccountListener implements IgniteInClosure<IgniteFuture<CallAccount>> {
+    private class AccountListener implements IgniteInClosure<IgniteFuture<Map<String, CallAccount>>> {
         private final long time;
 
         public AccountListener(long time) {
@@ -92,16 +104,19 @@ public class MockEventTracker {
         }
 
         @Override
-        public void apply(IgniteFuture<CallAccount> accountFuture) {
-            CallAccount account = accountFuture.get();
-            if (account != null) {
-                account.getActions().forEach(action -> {
-                    CallAccountAction sentAction = sentActions.remove(action.getActionId());
-                    if (sentAction != null) {
-                        actionCount.incrementAndGet();
-                        totalTime.addAndGet(time - action.getTimestamp());
-                    }
-                });
+        public void apply(IgniteFuture<Map<String, CallAccount>> accountFuture) {
+            Map<String, CallAccount> accounts = accountFuture.get();
+            accounts.values().stream().flatMap(callAccount -> callAccount.getActions().stream()).forEach(action -> {
+                CallAccountAction sentAction = sentActions.remove(action.getActionId());
+                if (sentAction != null) {
+                    actionCount.incrementAndGet();
+                    totalTime.addAndGet(time - action.getTimestamp());
+                }
+            });
+
+            if (sentActions.size() == 0) {
+                logger.info("All actions processed: initialization finished");
+                latch.countDown();
             }
         }
     }

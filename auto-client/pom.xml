@@ -49,13 +49,6 @@
 			<artifactId>ignite-spring-data</artifactId>
 			<version>${ignite.version}</version>
 		</dependency>
-
-		<!--<dependency>-->
-		<!--<groupId>javax.cache</groupId>-->
-		<!--<artifactId>cache-api</artifactId>-->
-		<!--<version>${javax.cache.version}</version>-->
-		<!--</dependency>-->
-
 		<dependency>
 			<groupId>org.apache.ignite</groupId>
 			<artifactId>ignite-core</artifactId>
@@ -89,6 +82,13 @@
 			<artifactId>ignite-indexing</artifactId>
 			<version>${ignite.version}</version>
 		</dependency>
+
+		<dependency>
+			<groupId>io.reactivex.rxjava3</groupId>
+			<artifactId>rxjava</artifactId>
+			<version>3.0.0-RC1</version>
+		</dependency>
+
 
    		<dependency>
    			<groupId>junit</groupId>

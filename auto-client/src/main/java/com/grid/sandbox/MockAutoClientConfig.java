@@ -9,6 +9,8 @@ import org.apache.ignite.configuration.IgniteConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.concurrent.ConcurrentSkipListSet;
+
 import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_CACHE;
 
 @Configuration
