@@ -63,12 +63,13 @@ public class MockSubscriptionGenerator {
         String subscriptionId = String.join(":", accountIds);
         Set<String> accountIdSet = new HashSet<>(Arrays.asList(accountIds));
         IgniteCache<String, CallAccount> cache = ignite.getOrCreateCache(CALL_ACCOUNT_CACHE);
+        Logger subscriptionLogger = LoggerFactory.getLogger(subscriptionId);
         // load snapshot
         Flowable<UpdateEvent> snapshotFlowable = Flowable.interval(0,30, TimeUnit.SECONDS, Schedulers.computation())
                 .map(tick -> {
                     IgniteFuture<Map<String, CallAccount>> accountFuture = cache.getAllAsync(accountIdSet);
                     Map<String, CallAccount> data = accountFuture.get();
-                    logger.info(subscriptionId + ": snapshot arrived, size=" + data.size());
+                    subscriptionLogger.info("snapshot arrived, size=" + data.size());
                     Map<String, CallAccountUpdate> snapshotEvents = new HashMap<>();
                     data.forEach( (key, value) -> snapshotEvents.put(key, new CallAccountUpdate(null, value)));
                     return new UpdateEvent(snapshotEvents, UpdateEvent.Type.SNAPSHOT);
@@ -82,7 +83,6 @@ public class MockSubscriptionGenerator {
                 .filter(event -> accountIdSet.contains(event.getAccountId()))
                 .map(event -> new UpdateEvent(Collections.singletonMap(event.getAccountId(), event), UpdateEvent.Type.INCREMENTAL))
                 .startWithItem(UpdateEvent.inital);
-        logger.info(subscriptionId + ": update feed created");
 
         // combine snapshot and updates
         AtomicInteger snapshotHash = new AtomicInteger(0);
@@ -91,19 +91,19 @@ public class MockSubscriptionGenerator {
             UpdateEvent snapshotEvent = (UpdateEvent)results[0];
             UpdateEvent updateEvent = (UpdateEvent)results[1];
             if (snapshotEvent.getType() == UpdateEvent.Type.INITIAL) {
-                logger.info(subscriptionId + ": updates received, no snapshot");
+                subscriptionLogger.info("updates received, no snapshot");
                 merge(reported, updateEvent.getUpdates());
                 return UpdateEvent.inital;
             } else {
                 boolean snapshotUpdated = snapshotHash.getAndSet(snapshotEvent.hashCode()) != snapshotEvent.hashCode();
                 if (snapshotUpdated) {
                     // report full snapshot
-                    logger.info(subscriptionId + ": report snapshot");
+                    subscriptionLogger.info("report snapshot");
                     merge(reported, snapshotEvent.getUpdates());
                     return new UpdateEvent(new HashMap<>(reported), UpdateEvent.Type.SNAPSHOT);
                 } else if (!updateEvent.getUpdates().isEmpty()) {
                     // report diff only
-                    logger.info(subscriptionId + ": report diff");
+                    subscriptionLogger.info("report diff");
                     Map<String, CallAccountUpdate> updates = merge(reported, updateEvent.getUpdates());
                     return new UpdateEvent(updates, UpdateEvent.Type.INCREMENTAL);
                 }
@@ -112,11 +112,10 @@ public class MockSubscriptionGenerator {
         };
         Flowable<UpdateEvent> merged = Flowable.combineLatest(combiner, snapshotFlowable, updatesFlowable)
                 .filter(event -> !event.getUpdates().isEmpty());
-        logger.info(subscriptionId + ": merged feed created");
 
         // test
         merged.subscribeOn(Schedulers.computation()).subscribe(event -> {
-            logger.info(subscriptionId + ": arrived " + event);
+            subscriptionLogger.info("Event " + event);
         });
     }
 
