@@ -1,14 +1,12 @@
-package com.grid.sandbox.model.transactions;
+package com.grid.sandbox.model.executions;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 
-import java.math.BigDecimal;
-
 @Data
 @AllArgsConstructor
-public class CallAccountBalanceAmendment implements CallAccountTransaction {
+public class CallAccountStaticsAmendment implements CallAccountExecution {
     @Getter
     private String accountId;
     @Getter
@@ -16,6 +14,6 @@ public class CallAccountBalanceAmendment implements CallAccountTransaction {
     @Getter
     private long timestamp;
     @Getter
-    private BigDecimal amount;
+    private boolean autoroll;
 
 }

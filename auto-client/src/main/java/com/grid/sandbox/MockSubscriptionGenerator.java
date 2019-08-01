@@ -24,6 +24,7 @@ import javax.cache.event.CacheEntryEvent;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_CACHE;
@@ -45,17 +46,16 @@ public class MockSubscriptionGenerator {
         Set<String> accountIdSet = new HashSet<>(Arrays.asList(accountIds));
         IgniteCache<String, CallAccount> cache = ignite.getOrCreateCache(CALL_ACCOUNT_CACHE);
         // load snapshot
-        BehaviorSubject<UpdateEvent> snapshot = BehaviorSubject.create();
-        Flowable<UpdateEvent> snapshotFlowable = snapshot.toFlowable(BackpressureStrategy.LATEST)
+        Flowable<UpdateEvent> snapshotFlowable = Flowable.interval(0,30, TimeUnit.SECONDS, Schedulers.computation())
+                .map(tick -> {
+                    IgniteFuture<Map<String, CallAccount>> accountFuture = cache.getAllAsync(accountIdSet);
+                    Map<String, CallAccount> data = accountFuture.get();
+                    logger.info(subscriptionId + ": snapshot arrived, size=" + data.size());
+                    Map<String, CallAccountUpdate> snapshotEvents = new HashMap<>();
+                    data.forEach( (key, value) -> snapshotEvents.put(key, new CallAccountUpdate(null, value)));
+                    return new UpdateEvent(snapshotEvents, UpdateEvent.Type.SNAPSHOT);
+                })
                 .startWithItem(UpdateEvent.inital);
-        cache.getAllAsync(accountIdSet).listen(accountFuture -> {
-            Map<String, CallAccount> data = accountFuture.get();
-            logger.info(subscriptionId + ": snapshot arrived, size=" + data.size());
-            Map<String, CallAccountUpdate> snapshotEvents = new HashMap<>();
-            data.forEach( (key, value) -> snapshotEvents.put(key, new CallAccountUpdate(null, value)));
-            snapshot.onNext(new UpdateEvent(snapshotEvents, UpdateEvent.Type.SNAPSHOT));
-            logger.info(subscriptionId + ": snapshot feed complete");
-        });
 
         // filter updates
         Flowable<UpdateEvent> updatesFlowable = accountUpdates
@@ -98,7 +98,7 @@ public class MockSubscriptionGenerator {
 
         // test
         merged.subscribeOn(Schedulers.computation()).subscribe(event -> {
-            logger.info(subscriptionId + ": event arrived" + event);
+            logger.info(subscriptionId + ": arrived " + event);
         });
     }
 

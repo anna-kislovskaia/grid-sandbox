@@ -3,7 +3,6 @@ package com.grid.sandbox;
 import com.grid.sandbox.model.CallAccount;
 import com.grid.sandbox.model.actions.CallAccountAction;
 import com.grid.sandbox.model.actions.CallAccountBalanceAction;
-import com.grid.sandbox.utils.CallAccountRemoteFilterFactory;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.IgniteMessaging;
@@ -64,6 +63,7 @@ public class MockEventTracker {
         ForkJoinPool.commonPool().invokeAll(generateAccountUpdates(2000));
 
         Thread.sleep(10000);
+        logger.info("Initialization finished");
     }
 
     public Set<String> getCallAccountKeys() {
@@ -106,10 +106,6 @@ public class MockEventTracker {
                     totalTime.addAndGet(time - action.getTimestamp());
                 }
             });
-
-            if (sentActions.size() == 0) {
-                logger.info("All actions processed: initialization finished");
-            }
         }
     }
 

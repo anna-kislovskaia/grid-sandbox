@@ -2,9 +2,9 @@ package com.grid.sandbox.model;
 
 import com.grid.sandbox.model.actions.CallAccountAction;
 import com.grid.sandbox.model.actions.CallAccountBalanceAction;
-import com.grid.sandbox.model.transactions.CallAccountBalanceAmendment;
-import com.grid.sandbox.model.transactions.CallAccountStaticsAmendment;
-import com.grid.sandbox.model.transactions.CallAccountTransaction;
+import com.grid.sandbox.model.executions.CallAccountBalanceAmendment;
+import com.grid.sandbox.model.executions.CallAccountStaticsAmendment;
+import com.grid.sandbox.model.executions.CallAccountExecution;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -18,12 +18,12 @@ public class CallAccount implements Serializable {
     private final boolean autoRoll;
     private final long version;
     private final List<CallAccountAction> actions;
-    private final List<CallAccountTransaction> transactions;
+    private final List<CallAccountExecution> executions;
 
     public CallAccount(String accountId) {
         this.accountId = accountId;
         this.balance = BigDecimal.ZERO;
-        this.transactions  = Collections.emptyList();
+        this.executions = Collections.emptyList();
         this.actions  = Collections.emptyList();
         this.version = 0;
         this.autoRoll = false;
@@ -34,14 +34,14 @@ public class CallAccount implements Serializable {
                        boolean autoRoll,
                        long version,
                        List<CallAccountAction> actions,
-                       List<CallAccountTransaction> transactions)
+                       List<CallAccountExecution> executions)
     {
         this.accountId = accountId;
         this.balance = balance;
         this.autoRoll = autoRoll;
         this.version = version;
         this.actions = Collections.unmodifiableList(actions);
-        this.transactions = Collections.unmodifiableList(transactions);
+        this.executions = Collections.unmodifiableList(executions);
     }
 
     public String getAccountId() {
@@ -64,15 +64,15 @@ public class CallAccount implements Serializable {
         return actions;
     }
 
-    public List<CallAccountTransaction> getTransactions() {
-        return transactions;
+    public List<CallAccountExecution> getExecutions() {
+        return executions;
     }
 
     public CallAccount apply(CallAccountAction action) {
         long nextVersion = version + 1;
         List<CallAccountAction> nextActions = new ArrayList<>(actions);
         nextActions.add(action);
-        List<CallAccountTransaction> nextTransactions = new ArrayList<>(transactions);
+        List<CallAccountExecution> nextTransactions = new ArrayList<>(executions);
         long timestamp = System.currentTimeMillis();
         switch (action.getType()) {
             case INCREASE:
