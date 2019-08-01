@@ -31,7 +31,7 @@ import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_CACHE;
 @Service
 public class MockSubscriptionGenerator {
     private static final Logger logger = LoggerFactory.getLogger(MockSubscriptionGenerator.class);
-    private PublishSubject<Map<String, CallAccountUpdate>> accountUpdates = PublishSubject.create();
+    private PublishSubject<CallAccountUpdate> accountUpdates = PublishSubject.create();
 
     @Autowired
     private MockEventTracker tracker;
@@ -59,12 +59,11 @@ public class MockSubscriptionGenerator {
 
         // filter updates
         Flowable<UpdateEvent> updatesFlowable = accountUpdates
+                .subscribeOn(Schedulers.computation())
                 .toFlowable(BackpressureStrategy.BUFFER)
-                .map(events -> {
-                    Map<String, CallAccountUpdate> copy = new HashMap<>(events);
-                    copy.keySet().retainAll(accountIdSet);
-                    return new UpdateEvent(copy, UpdateEvent.Type.INCREMENTAL);
-                }).startWithItem(UpdateEvent.inital);
+                .filter(event -> accountIdSet.contains(event.getAccountId()))
+                .map(event -> new UpdateEvent(Collections.singletonMap(event.getAccountId(), event), UpdateEvent.Type.INCREMENTAL))
+                .startWithItem(UpdateEvent.inital);
         logger.info(subscriptionId + ": update feed created");
 
         // combine snapshot and updates
@@ -122,13 +121,9 @@ public class MockSubscriptionGenerator {
         logger.info("Create event publisher");
         ContinuousQuery<String, CallAccount> subscriptionQuery = new ContinuousQuery<>();
         subscriptionQuery.setLocalListener((Iterable<CacheEntryEvent<? extends String, ? extends CallAccount>> iterable) -> {
-            Map<String, CallAccountUpdate> events = new HashMap<>();
             for (CacheEntryEvent<? extends String, ? extends CallAccount> event : iterable) {
-                CallAccountUpdate old = events.get(event.getKey());
-                CallAccountUpdate received = new CallAccountUpdate(event.getOldValue(), event.getValue()).merge(old);
-                events.put(event.getKey(), received);
+                accountUpdates.onNext(new CallAccountUpdate(event.getOldValue(), event.getValue()));
             }
-            accountUpdates.onNext(events);
         });
         subscriptionQuery.setLocal(true);
         cache.query(subscriptionQuery);

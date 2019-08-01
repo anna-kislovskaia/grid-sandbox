@@ -33,7 +33,6 @@ public class MockEventTracker {
     private AtomicLong totalTime = new AtomicLong();
     private AtomicInteger actionCount = new AtomicInteger();
     private final ConcurrentSkipListSet<String> callAccountKeys = new ConcurrentSkipListSet<>();
-    private final CountDownLatch latch = new CountDownLatch(1);
 
     @Autowired
     private Ignite ignite;
@@ -45,14 +44,11 @@ public class MockEventTracker {
         logger.info("Create query");
         ContinuousQuery<String, CallAccount> query = new ContinuousQuery<>();
         query.setLocalListener((Iterable<CacheEntryEvent<? extends String, ? extends CallAccount>> iterable) -> {
-            if (latch.getCount() == 0) {
-                return;
-            }
             long time = System.currentTimeMillis();
             Set<String> accountKeys = new HashSet<>();
             for (CacheEntryEvent<? extends String, ? extends CallAccount> event : iterable) {
                 accountKeys.add(event.getKey());
-                logger.info("Update: type=" + event.getEventType() + " value=" + event.getValue().toString() + " local=false");
+                logger.info("Update: type=" + event.getEventType() + " value=" + event.getValue().toString());
             }
             callAccountKeys.addAll(accountKeys);
             cache.getAllAsync(accountKeys).listen(new AccountListener(time));
@@ -62,15 +58,12 @@ public class MockEventTracker {
                     " count=" + actionCount.get() +
                     " average time=" + (count == 0 ? 0 : totalTime.get() / count));
         });
-        query.setRemoteFilterFactory(new CallAccountRemoteFilterFactory());
         query.setLocal(true);
         cache.query(query);
-        CallAccount account = cache.getAsync("account-1").get();
-        logger.info("get 1st async: " + account);
 
         ForkJoinPool.commonPool().invokeAll(generateAccountUpdates(2000));
 
-        latch.await();
+        Thread.sleep(10000);
     }
 
     public Set<String> getCallAccountKeys() {
@@ -116,7 +109,6 @@ public class MockEventTracker {
 
             if (sentActions.size() == 0) {
                 logger.info("All actions processed: initialization finished");
-                latch.countDown();
             }
         }
     }
