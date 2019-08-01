@@ -40,6 +40,24 @@ public class MockSubscriptionGenerator {
     @Autowired
     private Ignite ignite;
 
+    @PostConstruct
+    private void init() {
+        IgniteCache<String, CallAccount> cache = ignite.getOrCreateCache(CALL_ACCOUNT_CACHE);
+        logger.info("Create event publisher");
+        ContinuousQuery<String, CallAccount> subscriptionQuery = new ContinuousQuery<>();
+        subscriptionQuery.setLocalListener((Iterable<CacheEntryEvent<? extends String, ? extends CallAccount>> iterable) -> {
+            for (CacheEntryEvent<? extends String, ? extends CallAccount> event : iterable) {
+                accountUpdates.onNext(new CallAccountUpdate(event.getOldValue(), event.getValue()));
+            }
+        });
+        subscriptionQuery.setLocal(true);
+        cache.query(subscriptionQuery);
+
+        tracker.getCallAccountKeys().forEach(this::createAccountFeed);
+
+        logger.info("Generate update events");
+        ForkJoinPool.commonPool().invokeAll(tracker.generateAccountUpdates(2000));
+    }
 
     private void createAccountFeed(String... accountIds) {
         String subscriptionId = String.join(":", accountIds);
@@ -113,24 +131,5 @@ public class MockSubscriptionGenerator {
             }
         });
         return diff;
-    }
-
-    @PostConstruct
-    private void init() {
-        IgniteCache<String, CallAccount> cache = ignite.getOrCreateCache(CALL_ACCOUNT_CACHE);
-        logger.info("Create event publisher");
-        ContinuousQuery<String, CallAccount> subscriptionQuery = new ContinuousQuery<>();
-        subscriptionQuery.setLocalListener((Iterable<CacheEntryEvent<? extends String, ? extends CallAccount>> iterable) -> {
-            for (CacheEntryEvent<? extends String, ? extends CallAccount> event : iterable) {
-                accountUpdates.onNext(new CallAccountUpdate(event.getOldValue(), event.getValue()));
-            }
-        });
-        subscriptionQuery.setLocal(true);
-        cache.query(subscriptionQuery);
-
-        tracker.getCallAccountKeys().forEach(this::createAccountFeed);
-
-        logger.info("Generate update events");
-        ForkJoinPool.commonPool().invokeAll(tracker.generateAccountUpdates(2000));
     }
 }
