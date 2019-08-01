@@ -19,7 +19,10 @@ public class UpdateEvent {
     @Getter
     private final Type type;
 
-    public static UpdateEvent inital() {
-        return new UpdateEvent(Collections.emptyMap(), Type.INITIAL);
+    @Override
+    public String toString() {
+        return "UpdateEvent{[" +  updates.size() + "]" + type + "}";
     }
+
+    public static UpdateEvent inital = new UpdateEvent(Collections.emptyMap(), Type.INITIAL);
 }

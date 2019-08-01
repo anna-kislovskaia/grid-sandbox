@@ -12,10 +12,6 @@ public class CallAccountUpdate {
     @Getter
     private final CallAccount value;
 
-    public long getOldVersion() {
-        return oldValue != null ? oldValue.getVersion() : 0;
-    }
-
     public long getVersion() {
         return value.getVersion();
     }
@@ -24,13 +20,14 @@ public class CallAccountUpdate {
         return value.getAccountId();
     }
 
-    public CallAccountUpdate merge(CallAccountUpdate another) {
-        if (another == null) {
+    public CallAccountUpdate merge(CallAccountUpdate existing) {
+        if (existing == null) {
             return this;
         }
-        return new CallAccountUpdate(
-                this.getOldVersion() < another.getOldVersion() ? oldValue : another.getOldValue(),
-                this.getVersion() > another.getVersion() ? value : another.getValue()
-        );
+        if (this.getVersion() > existing.getVersion()) {
+            return new CallAccountUpdate(value, existing.getValue());
+        } else {
+            return existing;
+        }
     }
 }
