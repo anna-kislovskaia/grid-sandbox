@@ -7,11 +7,12 @@ import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
 import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
-import io.reactivex.subjects.BehaviorSubject;
 import io.reactivex.subjects.PublishSubject;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.cache.query.ContinuousQuery;
+import org.apache.ignite.cache.query.QueryCursor;
+import org.apache.ignite.cache.query.ScanQuery;
 import org.apache.ignite.lang.IgniteFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
+import javax.cache.Cache;
 import javax.cache.event.CacheEntryEvent;
 
 import java.util.*;
@@ -28,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_CACHE;
+import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_COUNT;
 
 @Service
 public class MockSubscriptionGenerator {
@@ -53,7 +56,15 @@ public class MockSubscriptionGenerator {
         subscriptionQuery.setLocal(true);
         cache.query(subscriptionQuery);
 
-        tracker.getCallAccountKeys().forEach(this::createAccountFeed);
+        logger.info("Loading existing keys");
+        QueryCursor<Cache.Entry<String, CallAccount>> cursor = cache.query(new ScanQuery<>());
+        List<Cache.Entry<String, CallAccount>> allAccounts = cursor.getAll();
+        logger.info("Keys loaded: " + allAccounts.size());
+        logger.info("Cache metrics: " + cache.metrics());
+        if (allAccounts.size() != CALL_ACCOUNT_COUNT) {
+            logger.error("Not all accounts loaded");
+        }
+        allAccounts.stream().map(Cache.Entry::getKey).forEach(this::createAccountFeed);
 
         logger.info("Generate update events");
         ForkJoinPool.commonPool().invokeAll(tracker.generateAccountUpdates(2000));

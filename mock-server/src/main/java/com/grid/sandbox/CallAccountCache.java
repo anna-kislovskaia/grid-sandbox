@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_CACHE;
+import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_COUNT;
 
 @Service
 public class CallAccountCache {
@@ -36,7 +37,7 @@ public class CallAccountCache {
 
     private Map<String, CallAccount> generateCallAccountHistory() {
         Map<String, CallAccount> history = new HashMap<>();
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < CALL_ACCOUNT_COUNT; i++) {
             CallAccount account = new CallAccount("account-" + i);
             history.put(account.getAccountId(),  account);
         }
