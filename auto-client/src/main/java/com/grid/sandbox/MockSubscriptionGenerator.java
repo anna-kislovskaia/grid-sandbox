@@ -28,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_CACHE;
 import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_COUNT;
@@ -36,6 +37,7 @@ import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_COUNT;
 public class MockSubscriptionGenerator {
     private static final Logger logger = LoggerFactory.getLogger(MockSubscriptionGenerator.class);
     private PublishSubject<CallAccountUpdate> accountUpdates = PublishSubject.create();
+    private Flowable<UpdateEvent> accountSnapshots;
 
     @Autowired
     private MockEventTracker tracker;
@@ -58,13 +60,25 @@ public class MockSubscriptionGenerator {
 
         logger.info("Loading existing keys");
         QueryCursor<Cache.Entry<String, CallAccount>> cursor = cache.query(new ScanQuery<>());
-        List<Cache.Entry<String, CallAccount>> allAccounts = cursor.getAll();
-        logger.info("Keys loaded: " + allAccounts.size());
+        Set<String> allAccountIds = cursor.getAll().stream().map(Cache.Entry::getKey).collect(Collectors.toSet());
+        logger.info("Keys loaded: " + allAccountIds.size());
         logger.info("Cache metrics: " + cache.metrics());
-        if (allAccounts.size() != CALL_ACCOUNT_COUNT) {
+        if (allAccountIds.size() != CALL_ACCOUNT_COUNT) {
             logger.error("Not all accounts loaded");
         }
-        allAccounts.stream().map(Cache.Entry::getKey).forEach(this::createAccountFeed);
+
+        accountSnapshots = Flowable.interval(0,30, TimeUnit.SECONDS, Schedulers.computation())
+                .map(tick -> {
+                    IgniteFuture<Map<String, CallAccount>> accountFuture = cache.getAllAsync(allAccountIds);
+                    Map<String, CallAccount> data = accountFuture.get();
+                    logger.info("snapshot arrived, size=" + data.size());
+                    Map<String, CallAccountUpdate> snapshotEvents = new HashMap<>();
+                    data.forEach( (key, value) -> snapshotEvents.put(key, new CallAccountUpdate(null, value)));
+                    return new UpdateEvent(snapshotEvents, UpdateEvent.Type.SNAPSHOT);
+                })
+                .startWithItem(UpdateEvent.inital)
+                .share();
+        allAccountIds.forEach(this::createAccountFeed);
 
         logger.info("Generate update events");
         ForkJoinPool.commonPool().invokeAll(tracker.generateAccountUpdates(2000));
@@ -73,19 +87,19 @@ public class MockSubscriptionGenerator {
     private void createAccountFeed(String... accountIds) {
         String subscriptionId = String.join(":", accountIds);
         Set<String> accountIdSet = new HashSet<>(Arrays.asList(accountIds));
-        IgniteCache<String, CallAccount> cache = ignite.getOrCreateCache(CALL_ACCOUNT_CACHE);
         Logger subscriptionLogger = LoggerFactory.getLogger(subscriptionId);
         // load snapshot
-        Flowable<UpdateEvent> snapshotFlowable = Flowable.interval(0,30, TimeUnit.SECONDS, Schedulers.computation())
-                .map(tick -> {
-                    IgniteFuture<Map<String, CallAccount>> accountFuture = cache.getAllAsync(accountIdSet);
-                    Map<String, CallAccount> data = accountFuture.get();
-                    subscriptionLogger.info("snapshot arrived, size=" + data.size());
-                    Map<String, CallAccountUpdate> snapshotEvents = new HashMap<>();
-                    data.forEach( (key, value) -> snapshotEvents.put(key, new CallAccountUpdate(null, value)));
-                    return new UpdateEvent(snapshotEvents, UpdateEvent.Type.SNAPSHOT);
-                })
-                .startWithItem(UpdateEvent.inital);
+        Flowable<UpdateEvent> snapshotFlowable = accountSnapshots
+                .map(snapshot -> {
+                    if (snapshot.getType() == UpdateEvent.Type.INITIAL) {
+                        return snapshot;
+                    }
+                    Map<String, CallAccountUpdate> accounts = accountIdSet.stream()
+                            .map(id -> snapshot.getUpdates().get(id))
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toMap(CallAccountUpdate::getAccountId, update -> update));
+                    return new UpdateEvent(accounts, UpdateEvent.Type.SNAPSHOT);
+                });
 
         // filter updates
         Flowable<UpdateEvent> updatesFlowable = accountUpdates
