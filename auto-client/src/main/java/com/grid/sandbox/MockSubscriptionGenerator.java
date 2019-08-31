@@ -5,7 +5,7 @@ import com.grid.sandbox.model.CallAccountUpdate;
 import com.grid.sandbox.model.UpdateEvent;
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
-import io.reactivex.functions.Function;
+import io.reactivex.flowables.ConnectableFlowable;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
 import org.apache.ignite.Ignite;
@@ -27,7 +27,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_CACHE;
@@ -36,6 +36,7 @@ import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_COUNT;
 @Service
 public class MockSubscriptionGenerator {
     private static final Logger logger = LoggerFactory.getLogger(MockSubscriptionGenerator.class);
+    private static final int REFRESH_INTERVAL = 30;
     private PublishSubject<CallAccountUpdate> accountUpdates = PublishSubject.create();
     private Flowable<UpdateEvent> accountSnapshots;
 
@@ -67,7 +68,7 @@ public class MockSubscriptionGenerator {
             logger.error("Not all accounts loaded");
         }
 
-        accountSnapshots = Flowable.interval(0,30, TimeUnit.SECONDS, Schedulers.computation())
+        accountSnapshots = Flowable.interval(0,REFRESH_INTERVAL, TimeUnit.SECONDS, Schedulers.computation())
                 .map(tick -> {
                     IgniteFuture<Map<String, CallAccount>> accountFuture = cache.getAllAsync(allAccountIds);
                     Map<String, CallAccount> data = accountFuture.get();
@@ -76,7 +77,7 @@ public class MockSubscriptionGenerator {
                     data.forEach( (key, value) -> snapshotEvents.put(key, new CallAccountUpdate(null, value)));
                     return new UpdateEvent(snapshotEvents, UpdateEvent.Type.SNAPSHOT);
                 })
-                .startWithItem(UpdateEvent.inital)
+                //.startWithItem(UpdateEvent.inital)
                 .share();
         allAccountIds.forEach(this::createAccountFeed);
 
@@ -102,51 +103,45 @@ public class MockSubscriptionGenerator {
                 });
 
         // filter updates
-        Flowable<UpdateEvent> updatesFlowable = accountUpdates
+        ConnectableFlowable<UpdateEvent> updatesFlowable = accountUpdates
                 .subscribeOn(Schedulers.computation())
                 .toFlowable(BackpressureStrategy.BUFFER)
                 .filter(event -> accountIdSet.contains(event.getAccountId()))
                 .map(event -> new UpdateEvent(Collections.singletonMap(event.getAccountId(), event), UpdateEvent.Type.INCREMENTAL))
-                .startWithItem(UpdateEvent.inital);
+                .replay(REFRESH_INTERVAL * 2, TimeUnit.SECONDS);
+                //.startWithItem(UpdateEvent.inital);
 
         // combine snapshot and updates
-        AtomicInteger snapshotHash = new AtomicInteger(0);
         Map<String, CallAccountUpdate> reported = new ConcurrentHashMap<>();
-        Function<Object[], UpdateEvent> combiner = results -> {
-            UpdateEvent snapshotEvent = (UpdateEvent)results[0];
-            UpdateEvent updateEvent = (UpdateEvent)results[1];
-            if (snapshotEvent.getType() == UpdateEvent.Type.INITIAL) {
-                subscriptionLogger.info("updates received, no snapshot");
-                merge(reported, updateEvent.getUpdates());
-                return UpdateEvent.inital;
-            } else {
-                boolean snapshotUpdated = snapshotHash.getAndSet(snapshotEvent.hashCode()) != snapshotEvent.hashCode();
-                if (snapshotUpdated) {
-                    // report full snapshot
-                    subscriptionLogger.info("report snapshot");
-                    merge(reported, snapshotEvent.getUpdates());
-                    return new UpdateEvent(new HashMap<>(reported), UpdateEvent.Type.SNAPSHOT);
-                } else if (!updateEvent.getUpdates().isEmpty()) {
-                    // report diff only
-                    subscriptionLogger.info("report diff");
-                    Map<String, CallAccountUpdate> updates = merge(reported, updateEvent.getUpdates());
-                    return new UpdateEvent(updates, UpdateEvent.Type.INCREMENTAL);
-                }
-                return UpdateEvent.inital;
-            }
-        };
-        Flowable<UpdateEvent> merged = Flowable.combineLatest(combiner, snapshotFlowable, updatesFlowable)
+        AtomicBoolean updatesConnected = new AtomicBoolean();
+        Flowable<UpdateEvent> merged = Flowable.merge(snapshotFlowable, updatesFlowable)
+                .map(event -> {
+                    subscriptionLogger.info("Received " + event);
+                    Map<String, CallAccountUpdate> updates = merge(reported, event);
+                    if (event.getType() == UpdateEvent.Type.SNAPSHOT) {
+                        subscriptionLogger.info("report snapshot");
+                        if (updatesConnected.compareAndSet(false, true)) {
+                            subscriptionLogger.info("replay updates");
+                            updatesFlowable.connect();
+                        }
+                        return new UpdateEvent(new HashMap<>(reported), UpdateEvent.Type.SNAPSHOT);
+                    } else if (!updates.isEmpty()){
+                        subscriptionLogger.info("report diff");
+                        return new UpdateEvent(updates, UpdateEvent.Type.INCREMENTAL);
+                    }
+                    return UpdateEvent.inital;
+                })
                 .filter(event -> !event.getUpdates().isEmpty());
 
         // test
         merged.subscribeOn(Schedulers.computation()).subscribe(event -> {
-            subscriptionLogger.info("Event " + event);
+            subscriptionLogger.info("Emitted " + event);
         });
     }
 
-    private static Map<String, CallAccountUpdate> merge(Map<String, CallAccountUpdate> existing, Map<String, CallAccountUpdate> events) {
+    private static Map<String, CallAccountUpdate> merge(Map<String, CallAccountUpdate> existing, UpdateEvent event) {
         Map<String, CallAccountUpdate> diff = new HashMap<>();
-        events.values().forEach(update -> {
+        event.getUpdates().values().forEach(update -> {
             CallAccountUpdate old = existing.get(update.getAccountId());
             CallAccountUpdate merged = update.merge(old);
             existing.put(merged.getAccountId(), merged);
@@ -154,6 +149,10 @@ public class MockSubscriptionGenerator {
                 diff.put(merged.getAccountId(), merged);
             }
         });
+        // cleanup map
+        if (event.getType() == UpdateEvent.Type.SNAPSHOT) {
+            existing.keySet().retainAll(event.getUpdates().keySet());
+        }
         return diff;
     }
 }

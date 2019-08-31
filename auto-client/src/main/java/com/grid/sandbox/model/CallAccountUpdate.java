@@ -8,9 +8,9 @@ import lombok.Getter;
 @AllArgsConstructor
 public class CallAccountUpdate {
     @Getter
-    private final CallAccount oldValue;
-    @Getter
     private final CallAccount value;
+    @Getter
+    private final CallAccount oldValue;
 
     public long getVersion() {
         return value.getVersion();
@@ -29,5 +29,13 @@ public class CallAccountUpdate {
         } else {
             return existing;
         }
+    }
+
+    @Override
+    public String toString() {
+        return "CallAccountUpdate{" +
+                (oldValue == null ? 0 : oldValue.getVersion()) + "->" +
+                "value=" + value +
+                '}';
     }
 }

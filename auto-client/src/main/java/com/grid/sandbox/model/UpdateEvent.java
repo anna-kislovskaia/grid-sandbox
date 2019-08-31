@@ -6,6 +6,7 @@ import lombok.Getter;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.StringJoiner;
 
 @Data
 @AllArgsConstructor
@@ -21,7 +22,9 @@ public class UpdateEvent {
 
     @Override
     public String toString() {
-        return "UpdateEvent{[" +  updates.size() + "]" + type + "}";
+        StringJoiner joiner = new StringJoiner("\n");
+        updates.values().forEach(update -> joiner.add(update.toString()));
+        return "UpdateEvent{" + type + ":" + joiner.toString() + "}";
     }
 
     public static UpdateEvent inital = new UpdateEvent(Collections.emptyMap(), Type.INITIAL);
