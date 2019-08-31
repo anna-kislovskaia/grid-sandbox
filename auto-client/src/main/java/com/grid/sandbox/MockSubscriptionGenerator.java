@@ -53,7 +53,7 @@ public class MockSubscriptionGenerator {
         ContinuousQuery<String, CallAccount> subscriptionQuery = new ContinuousQuery<>();
         subscriptionQuery.setLocalListener((Iterable<CacheEntryEvent<? extends String, ? extends CallAccount>> iterable) -> {
             for (CacheEntryEvent<? extends String, ? extends CallAccount> event : iterable) {
-                accountUpdates.onNext(new CallAccountUpdate(event.getOldValue(), event.getValue()));
+                accountUpdates.onNext(new CallAccountUpdate(event.getValue(), event.getOldValue()));
             }
         });
         subscriptionQuery.setLocal(true);
@@ -74,7 +74,7 @@ public class MockSubscriptionGenerator {
                     Map<String, CallAccount> data = accountFuture.get();
                     logger.info("snapshot arrived, size=" + data.size());
                     Map<String, CallAccountUpdate> snapshotEvents = new HashMap<>();
-                    data.forEach( (key, value) -> snapshotEvents.put(key, new CallAccountUpdate(null, value)));
+                    data.forEach( (key, value) -> snapshotEvents.put(key, new CallAccountUpdate(value, null)));
                     return new UpdateEvent(snapshotEvents, UpdateEvent.Type.SNAPSHOT);
                 })
                 //.startWithItem(UpdateEvent.inital)
