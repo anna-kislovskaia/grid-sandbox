@@ -1,27 +1,63 @@
 package com.grid.sandbox;
 
-import com.grid.sandbox.model.CallAccount;
-import org.apache.ignite.Ignite;
-import org.apache.ignite.Ignition;
-import org.apache.ignite.cache.CacheMode;
-import org.apache.ignite.configuration.CacheConfiguration;
-import org.apache.ignite.configuration.IgniteConfiguration;
+import com.grid.sandbox.model.Trade;
+import com.hazelcast.config.*;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.replicatedmap.ReplicatedMap;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_CACHE;
+import java.util.Map;
+
+import static com.grid.sandbox.utils.CacheUtils.TRADE_CACHE;
 
 @Configuration
 public class MockServerConfig {
+    private static final String LOCALHOST = "127.0.0.1";
+
+    @Value("#{${hazelcast.join.port}}")
+    private Map<String, Integer> port;
+
+    @Value("${instance.name}")
+    private String instanceName;
 
     @Bean
-    public Ignite igniteInstance() {
-        IgniteConfiguration cfg = new IgniteConfiguration();
-        cfg.setIgniteInstanceName("mock-server-node");
-        CacheConfiguration callAccounts = new CacheConfiguration<Long, CallAccount>(CALL_ACCOUNT_CACHE)
-                .setIndexedTypes(String.class, CallAccount.class)
-                .setCacheMode(CacheMode.REPLICATED);
-        cfg.setCacheConfiguration(callAccounts);
-        return Ignition.start(cfg);
+    public Config getHazelcastServerConfig() {
+        Config config = new Config();
+        config.setClusterName("sandbox");
+
+        Integer instancePort = port.get(instanceName);
+        config.getNetworkConfig().setPort(instancePort);
+
+        JoinConfig join = config.getNetworkConfig().getJoin();
+        join.getMulticastConfig().setEnabled(false);
+        join.getTcpIpConfig().setEnabled(true);
+        for (Integer clusterPort : port.values()) {
+            String address = LOCALHOST + ":" + clusterPort;
+            join.getTcpIpConfig().addMember(address);
+        }
+
+        ReplicatedMapConfig replicatedMapConfig = config.getReplicatedMapConfig(TRADE_CACHE);
+        replicatedMapConfig.setAsyncFillup(false);
+        replicatedMapConfig.getMergePolicyConfig().setPolicy(MergePolicyConfig.DEFAULT_MERGE_POLICY);
+        EntryListenerConfig listenerConfig = new EntryListenerConfig();
+        listenerConfig.setIncludeValue(true);
+        listenerConfig.setImplementation(new ServerTradeCacheListener());
+        replicatedMapConfig.addEntryListenerConfig(listenerConfig);
+
+        return config;
+    }
+
+    @Bean
+    public HazelcastInstance hazelcastInstance(Config config) {
+        HazelcastInstance instance = Hazelcast.newHazelcastInstance(config);
+        return instance;
+    }
+
+    @Bean
+    public ReplicatedMap<String, Trade> getTradeReplicatedMap(HazelcastInstance hazelcast) {
+        return hazelcast.getReplicatedMap(TRADE_CACHE);
     }
 }

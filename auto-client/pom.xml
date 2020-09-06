@@ -45,43 +45,11 @@
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.ignite</groupId>
-			<artifactId>ignite-spring-data</artifactId>
-			<version>${ignite.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.ignite</groupId>
-			<artifactId>ignite-core</artifactId>
-			<version>${ignite.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.ignite</groupId>
-			<artifactId>ignite-spring</artifactId>
-			<version>${ignite.version}</version>
-			<!--Remove exclusion while upgrading ignite-spring version to 5.0-->
-			<exclusions>
-				<exclusion>
-					<groupId>org.springframework</groupId>
-					<artifactId>spring-core</artifactId>
-				</exclusion>
-				<exclusion>
-					<groupId>org.springframework</groupId>
-					<artifactId>spring-beans</artifactId>
-				</exclusion>
-			</exclusions>
+			<groupId>com.hazelcast</groupId>
+			<artifactId>hazelcast</artifactId>
+			<version>${hazelcast.version}</version>
 		</dependency>
 
-		<dependency>
-			<groupId>org.apache.ignite</groupId>
-			<artifactId>ignite-log4j</artifactId>
-			<version>${ignite.version}</version>
-		</dependency>
-
-		<dependency>
-			<groupId>org.apache.ignite</groupId>
-			<artifactId>ignite-indexing</artifactId>
-			<version>${ignite.version}</version>
-		</dependency>
 
 		<dependency>
 			<groupId>io.reactivex.rxjava3</groupId>
@@ -97,11 +65,6 @@
    			<scope>test</scope>
    		</dependency>
 		<!-- https://mvnrepository.com/artifact/com.google.code.findbugs/jsr305 -->
-		<dependency>
-		    <groupId>com.google.code.findbugs</groupId>
-		    <artifactId>jsr305</artifactId>
-		    <version>${jsr305.version}</version>
-		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
