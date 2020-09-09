@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import reactor.core.publisher.Flux;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -33,23 +32,22 @@ public class TradeController {
     @GetMapping(path = "/open", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<PageUpdate<Trade>> getOpenTrades(@RequestParam Optional<Integer> page,
                                                  @RequestParam Optional<Integer> size,
-                                                 @RequestParam Optional<String> sort)
+                                                 @RequestParam Optional<List<String>> sort)
     {
-        Pageable request = getPagebleRequest(page, size, sort);
+        Pageable request = getPagebleRequest(page, size, parseSort(sort));
         return Flux.from(tradeReportService.getTrades(request, OPEN_TRADES));
     }
 
     @GetMapping(path = "/all", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<PageUpdate<Trade>> getAllTrades(@RequestParam Optional<Integer> page,
                                                  @RequestParam Optional<Integer> size,
-                                                 @RequestParam Optional<String> sort)
+                                                 @RequestParam Optional<List<String>> sort)
     {
-        Pageable request = getPagebleRequest(page, size, sort);
+        Pageable request = getPagebleRequest(page, size, parseSort(sort));
         return Flux.from(tradeReportService.getTrades(request, (trade) -> true));
     }
 
-    public static Pageable getPagebleRequest(Optional<Integer> page, Optional<Integer> size, Optional<String> sortSettings) {
-        Sort sort = parseSort(sortSettings);
+    public static Pageable getPagebleRequest(Optional<Integer> page, Optional<Integer> size, Sort sort) {
         if (page.isPresent() || size.isPresent()) {
             return PageRequest.of(page.orElse(0), size.orElse(100), sort);
         } else {
@@ -57,9 +55,9 @@ public class TradeController {
         }
     }
 
-    public static Sort parseSort(Optional<String> sortSettings) {
+    public static Sort parseSort(Optional<List<String>> sortSettings) {
         return sortSettings.map(sorting -> {
-            List<Sort.Order> orders = Arrays.stream(sorting.split(","))
+            List<Sort.Order> orders = sorting.stream()
                     .map(orderSettings -> {
                         String[] settings = orderSettings.split(":");
                         if (settings.length == 2) {

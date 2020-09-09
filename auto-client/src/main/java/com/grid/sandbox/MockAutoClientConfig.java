@@ -76,6 +76,8 @@ public class MockAutoClientConfig {
                 (trade1, trade2) -> trade1.getClient().compareTo(trade2.getClient()));
         tradeComparators.put("balance",
                 (trade1, trade2) -> trade1.getBalance().compareTo(trade2.getBalance()));
+        tradeComparators.put("status",
+                (trade1, trade2) -> trade1.getStatus().compareTo(trade2.getStatus()));
         return tradeComparators;
     }
 
