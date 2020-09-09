@@ -1,4 +1,4 @@
-package com.grid.sandbox;
+package com.grid.sandbox.service;
 
 import com.grid.sandbox.model.Trade;
 import com.hazelcast.core.EntryAdapter;

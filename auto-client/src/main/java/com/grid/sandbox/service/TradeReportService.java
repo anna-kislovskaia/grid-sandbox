@@ -52,7 +52,8 @@ public class TradeReportService {
                         handleUnpagedUpdate(builder, snapshot, changed, sortedTrades);
                     }
                     return builder.build();
-                });
+                })
+                .filter(update -> !update.isEmpty());
     }
 
     private static void handlePagedUpdate(Pageable request,

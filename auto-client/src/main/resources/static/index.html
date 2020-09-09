@@ -14,12 +14,17 @@
 
     <script lang="javascript">
             var eventStream;
-            function resetEventStream() {
-                const dataContainer = document.getElementById('data');
+
+            function stopEventStream() {
                 if (eventStream) {
                     eventStream.close();
-                    dataContainer.innerHTML = '';
                 }
+            }
+
+            function resetEventStream() {
+                stopEventStream();
+                const dataContainer = document.getElementById('data');
+                dataContainer.innerHTML = '';
                 const selector = document.getElementById('reportType');
                 const reportType = selector.options[selector.selectedIndex].value;
                 const pageNumber = document.getElementById('pageNumber').value;
@@ -41,10 +46,7 @@
                     const contentElement = document.createElement("div");
 
                     const data = JSON.parse(message.data);
-                    let content = '';
-                    if (data.snapshot) {
-                        content += '<h2>Snapshot</h2>';
-                    }
+                    let content = `<h2>${data.snapshot ? "Snapshot" : "Update"}</h2>`;
                     content += '<ol class="list-group">';
                     data.updated.map(row => {
                         content += `<li class="list-group-item text-nowrap">${JSON.stringify(row)}</li>`;
@@ -99,10 +101,13 @@
     <div class="row">
         <div class="col-6">
             <button class="btn btn-primary" onclick="resetEventStream()">Subscribe</button>
+            <button class="btn btn-primary" onclick="stopEventStream()">Stop Updates</button>
         </div>
     </div>
-    <div id="data" class="col-12">
+    <div class="row">
+        <div id="data" class="col-12">
 
+        </div>
     </div>
 </div>
 </body>

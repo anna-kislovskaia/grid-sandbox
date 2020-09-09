@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @ToString
 @Getter
-@Builder(builderMethodName = "toBuilder")
+@Builder(toBuilder = true, builderClassName = "Builder")
 public class Trade implements Serializable {
     private String tradeId;
     private BigDecimal balance;

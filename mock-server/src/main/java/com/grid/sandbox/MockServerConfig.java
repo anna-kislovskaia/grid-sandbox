@@ -1,6 +1,7 @@
 package com.grid.sandbox;
 
 import com.grid.sandbox.model.Trade;
+import com.grid.sandbox.service.ServerTradeCacheListener;
 import com.hazelcast.config.*;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
@@ -8,11 +9,15 @@ import com.hazelcast.replicatedmap.ReplicatedMap;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import springfox.documentation.spi.DocumentationType;
+import springfox.documentation.spring.web.plugins.Docket;
+import springfox.documentation.swagger2.annotations.EnableSwagger2;
 
 import java.util.Map;
 
 import static com.grid.sandbox.utils.CacheUtils.TRADE_CACHE;
 
+@EnableSwagger2
 @Configuration
 public class MockServerConfig {
     private static final String LOCALHOST = "127.0.0.1";
@@ -59,5 +64,10 @@ public class MockServerConfig {
     @Bean
     public ReplicatedMap<String, Trade> getTradeReplicatedMap(HazelcastInstance hazelcast) {
         return hazelcast.getReplicatedMap(TRADE_CACHE);
+    }
+
+    @Bean
+    public Docket api() {
+        return new Docket(DocumentationType.SWAGGER_2);
     }
 }

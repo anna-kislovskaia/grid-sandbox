@@ -39,12 +39,6 @@ public class TradeFeedService extends EntryAdapter<String, Trade> {
     private void init() {
         cacheSubId.set(tradeCache.addEntryListener(this));
         executor.execute(this::updateHandler);
-
-        // test
-        Flowable<UpdateEvent> testevents = getTradeFeed();
-        testevents.subscribeOn(Schedulers.computation()).subscribe(event -> {
-            log.info("Emitted " + event);
-        });
     }
 
     @Override
