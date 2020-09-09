@@ -11,11 +11,17 @@ import com.hazelcast.replicatedmap.ReplicatedMap;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import springfox.documentation.spi.DocumentationType;
+import springfox.documentation.spring.web.plugins.Docket;
+import springfox.documentation.swagger2.annotations.EnableSwagger2;
 
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Map;
 
 import static com.grid.sandbox.utils.CacheUtils.TRADE_CACHE;
 
+@EnableSwagger2
 @Configuration
 public class MockAutoClientConfig {
 
@@ -60,4 +66,22 @@ public class MockAutoClientConfig {
     public ReplicatedMap<String, Trade> getTradeReplicatedMap(HazelcastInstance hazelcast) {
         return hazelcast.getReplicatedMap(TRADE_CACHE);
     }
+
+    @Bean(name = "tradeComparators")
+    public Map<String, Comparator<Trade>> getTradePropertyComparators() {
+        Map<String, Comparator<Trade>> tradeComparators = new HashMap<>();
+        tradeComparators.put("lastUpdateTimestamp",
+                (trade1, trade2) -> Long.compare(trade1.getLastUpdateTimestamp(), trade2.getLastUpdateTimestamp()));
+        tradeComparators.put("client",
+                (trade1, trade2) -> trade1.getClient().compareTo(trade2.getClient()));
+        tradeComparators.put("balance",
+                (trade1, trade2) -> trade1.getBalance().compareTo(trade2.getBalance()));
+        return tradeComparators;
+    }
+
+    @Bean
+    public Docket api() {
+        return new Docket(DocumentationType.SWAGGER_2);
+    }
+
 }

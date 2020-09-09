@@ -1,4 +1,4 @@
-package com.grid.sandbox;
+package com.grid.sandbox.service;
 
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.model.UpdateEvent;
@@ -8,6 +8,7 @@ import com.hazelcast.core.EntryEventType;
 import com.hazelcast.replicatedmap.ReplicatedMap;
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.flowables.ConnectableFlowable;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.PublishSubject;
@@ -24,7 +25,7 @@ import java.util.stream.Collectors;
 
 @Service
 @Log4j2
-public class TradeFeedProvider extends EntryAdapter<String, Trade> {
+public class TradeFeedService extends EntryAdapter<String, Trade> {
     private static final int REFRESH_INTERVAL = 30;
     private final AtomicReference<UUID> cacheSubId = new AtomicReference<>();
     private final BlockingQueue<EntryEvent<String, Trade>> eventQueue = new ArrayBlockingQueue<>(Character.MAX_VALUE);
@@ -77,7 +78,7 @@ public class TradeFeedProvider extends EntryAdapter<String, Trade> {
                 .subscribeOn(Schedulers.computation())
                 .toFlowable(BackpressureStrategy.BUFFER)
                 .replay(REFRESH_INTERVAL, TimeUnit.SECONDS);
-        updatesFlowable.subscribe();
+        Disposable disposable = updatesFlowable.subscribe();
 
         Map<String, EntryEvent<String, Trade>> tradeSnapshot = tradeCache.entrySet().stream()
                 .map(entry -> new EntryEvent<String, Trade>("tradeCache", null, EntryEventType.ADDED.getType(), entry.getKey(), entry.getValue()))
@@ -88,28 +89,13 @@ public class TradeFeedProvider extends EntryAdapter<String, Trade> {
                 .map(event -> {
                     log.info("Received " + event);
                     if (event.getType() == UpdateEvent.Type.SNAPSHOT) {
-                        log.info("report snapshot");
+                        log.info("Switch on updates");
                         updatesFlowable.connect();
-                        return event;
-                    } else {
-                        log.info("report diff");
-                        List<String> staleTradeIds = event.getUpdates().values().stream()
-                                .map(EntryEvent::getValue)
-                                .filter(trade -> {
-                                    EntryEvent<String, Trade> existing = tradeSnapshot.get(trade.getTradeId());
-                                    return existing != null
-                                            && existing.getValue() != null
-                                            && existing.getValue().getLastUpdateTimestamp() > trade.getLastUpdateTimestamp();
-                                })
-                                .map(Trade::getTradeId)
-                                .collect(Collectors.toList());
-                        if (staleTradeIds.isEmpty()) {
-                            return event;
-                        } else {
-                            Map<String, EntryEvent<String, Trade>> updates = new HashMap<>(event.getUpdates());
-                            updates.keySet().removeAll(staleTradeIds);
-                            return new UpdateEvent(updates, UpdateEvent.Type.INCREMENTAL);
-                        }
+                    }
+                    return event;
+                }).doOnError(e -> {
+                    if (!disposable.isDisposed()) {
+                        disposable.dispose();
                     }
                 });
     }
