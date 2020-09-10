@@ -87,7 +87,7 @@ public class TradeFeedService extends EntryAdapter<String, Trade> {
                         updatesFlowable.connect();
                     }
                     return event;
-                }).doOnError(e -> {
+                }).doOnTerminate(() -> {
                     if (!disposable.isDisposed()) {
                         disposable.dispose();
                     }
