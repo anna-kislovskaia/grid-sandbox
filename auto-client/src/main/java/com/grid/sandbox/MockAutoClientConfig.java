@@ -1,11 +1,11 @@
 package com.grid.sandbox;
 
 import com.grid.sandbox.model.Trade;
+import com.grid.sandbox.service.ClusterLifecycleListenerService;
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.client.config.ClientNetworkConfig;
-import com.hazelcast.config.EvictionPolicy;
-import com.hazelcast.config.NearCacheConfig;
+import com.hazelcast.config.ListenerConfig;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.replicatedmap.ReplicatedMap;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,7 +34,12 @@ public class MockAutoClientConfig {
     private Integer clientPort;
 
     @Bean
-    public ClientConfig hazelcastClientConfig() {
+    public ClusterLifecycleListenerService lifecycleListenerService() {
+        return new ClusterLifecycleListenerService();
+    }
+
+    @Bean
+    public ClientConfig hazelcastClientConfig(ClusterLifecycleListenerService listenerService) {
         ClientConfig config = new ClientConfig();
         config.setClusterName("sandbox");
 
@@ -49,16 +54,16 @@ public class MockAutoClientConfig {
             networkConfig.getAddresses().add(address);
         }
 
-        NearCacheConfig tradeCacheConfig = new NearCacheConfig(TRADE_CACHE);
-        tradeCacheConfig.getEvictionConfig().setEvictionPolicy(EvictionPolicy.NONE);
-        config.addNearCacheConfig(tradeCacheConfig);
+        // listeners
+        config.getListenerConfigs().add(new ListenerConfig().setImplementation(listenerService));
 
         return config;
     }
 
     @Bean
-    public HazelcastInstance hazelcastInstance(ClientConfig config) {
+    public HazelcastInstance hazelcastInstance(ClientConfig config, ClusterLifecycleListenerService lifecycleListenerService) {
         HazelcastInstance instance = HazelcastClient.newHazelcastClient(config);
+        instance.getLifecycleService().addLifecycleListener(lifecycleListenerService);
         return instance;
     }
 

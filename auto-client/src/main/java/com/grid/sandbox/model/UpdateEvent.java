@@ -31,5 +31,9 @@ public class UpdateEvent {
         }
     }
 
+    public String toShortString() {
+        return "UpdateEvent{" + type + ":" + updates.size() + "}";
+    }
+
     public static UpdateEvent inital = new UpdateEvent(Collections.emptyMap(), Type.INITIAL);
 }

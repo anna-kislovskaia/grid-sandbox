@@ -8,7 +8,6 @@ import com.grid.sandbox.utils.RedBlackBST;
 import com.grid.sandbox.utils.MultiComparator;
 import com.hazelcast.core.EntryEvent;
 import io.reactivex.Flowable;
-import io.reactivex.schedulers.Schedulers;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -37,21 +36,22 @@ public class TradeReportService {
         final RedBlackBST<Trade, Trade> sortedTrades = new RedBlackBST<>(comparator);
         final AtomicReference<Map<String, Trade>> page = new AtomicReference<>(new HashMap<>());
         return tradeFeedService.getTradeFeed()
-                .subscribeOn(Schedulers.single())
                 .map(updateEvent -> {
-                    Collection<Trade> changed = handleTradeUpdates(updateEvent, filter, sortedTrades);
-                    boolean snapshot = updateEvent.getType() == UpdateEvent.Type.SNAPSHOT;
-                    PageUpdate.Builder<Trade> builder = PageUpdate.<Trade>builder()
-                            .totalSize(sortedTrades.size())
-                            .pageSize(request.getPageSize())
-                            .pageNumber(request.getPageNumber());
+                    synchronized (sortedTrades) {
+                        Collection<Trade> changed = handleTradeUpdates(updateEvent, filter, sortedTrades);
+                        boolean snapshot = updateEvent.getType() == UpdateEvent.Type.SNAPSHOT;
+                        PageUpdate.Builder<Trade> builder = PageUpdate.<Trade>builder()
+                                .totalSize(sortedTrades.size())
+                                .pageSize(request.getPageSize())
+                                .pageNumber(request.getPageNumber());
 
-                    if (request.isPaged()) {
-                        handlePagedUpdate(request, page, builder, snapshot, changed, sortedTrades);
-                    } else {
-                        handleUnpagedUpdate(builder, snapshot, changed, sortedTrades);
+                        if (request.isPaged()) {
+                            handlePagedUpdate(request, page, builder, snapshot, changed, sortedTrades);
+                        } else {
+                            handleUnpagedUpdate(builder, snapshot, changed, sortedTrades);
+                        }
+                        return builder.build();
                     }
-                    return builder.build();
                 })
                 .filter(update -> !update.isEmpty());
     }
