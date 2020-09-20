@@ -12,8 +12,11 @@ import javax.annotation.PostConstruct;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.grid.sandbox.utils.CacheUtils.CALL_ACCOUNT_COUNT;
 
@@ -40,10 +43,12 @@ public class TradeCacheUpdater {
     }
 
     public void generateTradeHistory(int size) {
-        for (int i = 0; i < size; i++) {
-            Trade trade = generateNewTrade();
-            tradeCache.put(trade.getTradeId(),  trade);
-        }
+        log.info("Generate new trades: {}", size);
+        Map<String, Trade> trades = IntStream.of(size)
+                .mapToObj(i -> generateNewTrade())
+                .collect(Collectors.toMap(Trade::getTradeId, trade -> trade));
+        tradeCache.putAll(trades);
+        log.info("Generated");
     }
 
 

@@ -136,11 +136,12 @@ public class TradeReportService {
     }
 
     private static Collection<Trade> handleTradeUpdates(UpdateEvent updateEvent, Predicate<Trade> filter, RedBlackBST<Trade, Trade> trades) {
-        List<Trade> updated = new ArrayList<>();
+        List<Trade> updated = new ArrayList<>(updateEvent.getUpdates().size());
         boolean snapshot = updateEvent.getType() == UpdateEvent.Type.SNAPSHOT;
         if (snapshot) {
             trades.clear();
         }
+        log.info("Processing trade update: {} {}", snapshot, updateEvent.getUpdates().size());
         for (EntryEvent<String, Trade> event : updateEvent.getUpdates().values()) {
             boolean tradeDeleted = event.getOldValue() != null && trades.delete(event.getOldValue()) != null;
             Trade trade = event.getValue();
@@ -153,6 +154,7 @@ public class TradeReportService {
                 updated.add(changed);
             }
         }
+        log.info("Processed");
         return updated;
     }
 
