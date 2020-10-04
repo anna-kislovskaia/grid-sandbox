@@ -114,7 +114,7 @@ public class TradeFeedService {
 
         return snapshotFeed.switchMap(snapshot -> {
             Flowable<UpdateEvent> snapshotEvent = Flowable.just(snapshot);
-            return Flowable.concat(snapshotEvent, updateEventFlowable);
+            return Flowable.merge(snapshotEvent, updateEventFlowable);
         });
     }
 
