@@ -2,6 +2,7 @@ package com.grid.sandbox;
 
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.service.ClusterLifecycleListenerService;
+import com.grid.sandbox.service.TradeUpdateFeedService;
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.client.config.ClientNetworkConfig;
@@ -39,6 +40,13 @@ public class MockAutoClientConfig {
     }
 
     @Bean
+    public TradeUpdateFeedService tradeUpdateFeedService() {
+        TradeUpdateFeedService service = new TradeUpdateFeedService();
+        service.init();
+        return service;
+    }
+
+    @Bean
     public ClientConfig hazelcastClientConfig(ClusterLifecycleListenerService listenerService) {
         ClientConfig config = new ClientConfig();
         config.setClusterName("sandbox");
@@ -68,22 +76,12 @@ public class MockAutoClientConfig {
     }
 
     @Bean
-    public ReplicatedMap<String, Trade> getTradeReplicatedMap(HazelcastInstance hazelcast) {
-        return hazelcast.getReplicatedMap(TRADE_CACHE);
-    }
-
-    @Bean(name = "tradeComparators")
-    public Map<String, Comparator<Trade>> getTradePropertyComparators() {
-        Map<String, Comparator<Trade>> tradeComparators = new HashMap<>();
-        tradeComparators.put("lastUpdateTimestamp",
-                (trade1, trade2) -> Long.compare(trade1.getLastUpdateTimestamp(), trade2.getLastUpdateTimestamp()));
-        tradeComparators.put("client",
-                (trade1, trade2) -> trade1.getClient().compareTo(trade2.getClient()));
-        tradeComparators.put("balance",
-                (trade1, trade2) -> trade1.getBalance().compareTo(trade2.getBalance()));
-        tradeComparators.put("status",
-                (trade1, trade2) -> trade1.getStatus().compareTo(trade2.getStatus()));
-        return tradeComparators;
+    public ReplicatedMap<String, Trade> getTradeReplicatedMap(HazelcastInstance hazelcast,
+                                                              TradeUpdateFeedService tradeUpdateFeedService)
+    {
+        ReplicatedMap<String, Trade>  cache = hazelcast.getReplicatedMap(TRADE_CACHE);
+        cache.addEntryListener(tradeUpdateFeedService);
+        return cache;
     }
 
     @Bean

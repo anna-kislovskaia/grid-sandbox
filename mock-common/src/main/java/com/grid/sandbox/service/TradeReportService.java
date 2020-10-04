@@ -10,7 +10,6 @@ import com.hazelcast.core.EntryEvent;
 import io.reactivex.Flowable;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -28,8 +27,7 @@ public class TradeReportService {
     private TradeFeedService tradeFeedService;
 
     @Autowired
-    @Qualifier("tradeComparators")
-    private Map<String, Comparator<Trade>> tradeComparators;
+    private ComparatorsService comparatorsService;
 
     public Flowable<PageUpdate<Trade>> getTrades(Pageable request, Predicate<Trade> filter) {
         Comparator<Trade> comparator = getTradeComparatorBySort(request.getSort());
@@ -38,7 +36,7 @@ public class TradeReportService {
         return tradeFeedService.getTradeFeed()
                 .map(updateEvent -> {
                     synchronized (sortedTrades) {
-                        Collection<Trade> changed = handleTradeUpdates(updateEvent, filter, sortedTrades);
+                        Map<String, Trade> changed = handleTradeUpdates(updateEvent, filter, sortedTrades);
                         boolean snapshot = updateEvent.getType() == UpdateEvent.Type.SNAPSHOT;
                         PageUpdate.Builder<Trade> builder = PageUpdate.<Trade>builder()
                                 .totalSize(sortedTrades.size())
@@ -53,14 +51,14 @@ public class TradeReportService {
                         return builder.build();
                     }
                 })
-                .filter(update -> !update.isEmpty());
+                .filter(update -> !update.isEmpty() || update.isSnapshot());
     }
 
     private static void handlePagedUpdate(Pageable request,
                                           AtomicReference<Map<String, Trade>> page,
                                           PageUpdate.Builder<Trade> builder,
                                           boolean snapshot,
-                                          Collection<Trade> changed,
+                                          Map<String, Trade> changed,
                                           RedBlackBST<Trade, Trade> sortedTrades) {
 
         if (request.getOffset() >= sortedTrades.size()) {
@@ -87,24 +85,24 @@ public class TradeReportService {
                     .updated(new ArrayList<>(current.values()))
                     .deleted(Collections.emptyList());
         } else {
-            old.keySet().removeAll(current.keySet());
-            List<Trade> updated = changed.stream()
-                    .filter(trade -> current.containsKey(trade.getTradeId()))
+            List<Trade> updated = current.values().stream()
+                    .filter(trade -> !old.containsKey(trade.getTradeId()) || changed.containsKey(trade.getTradeId()))
                     .collect(Collectors.toList());
+            old.keySet().removeAll(current.keySet());
             builder.updated(updated).deleted(new ArrayList<>(old.values()));
         }
     }
 
     private static void handleUnpagedUpdate(PageUpdate.Builder<Trade> builder,
                                             boolean snapshot,
-                                            Collection<Trade> updated,
+                                            Map<String, Trade> updated,
                                             RedBlackBST<Trade, Trade> sortedTrades) {
         if (snapshot) {
             builder.snapshot(true)
                     .updated(toList(sortedTrades.keys()))
                     .deleted(Collections.emptyList());
         } else {
-            Map<Boolean, List<Trade>> partitioned = updated.stream()
+            Map<Boolean, List<Trade>> partitioned = updated.values().stream()
                     .collect(Collectors.partitioningBy(sortedTrades::contains));
             builder.updated(partitioned.get(true))
                     .deleted(partitioned.get(false));
@@ -122,7 +120,7 @@ public class TradeReportService {
     private MultiComparator<Trade> getTradeComparatorBySort(Sort sort) {
         List<Comparator<Trade>> comparators = new ArrayList<>();
         sort.forEach(order -> {
-            Comparator<Trade> comparator = tradeComparators.get(order.getProperty());
+            Comparator<Trade> comparator = comparatorsService.getTradePropertyComparator(order.getProperty());
             if (comparator != null) {
                 comparator = order.getDirection() == Sort.Direction.DESC ? comparator.reversed() : comparator;
                 comparators.add(comparator);
@@ -135,8 +133,8 @@ public class TradeReportService {
         return new MultiComparator<>(comparators);
     }
 
-    private static Collection<Trade> handleTradeUpdates(UpdateEvent updateEvent, Predicate<Trade> filter, RedBlackBST<Trade, Trade> trades) {
-        List<Trade> updated = new ArrayList<>(updateEvent.getUpdates().size());
+    private static Map<String, Trade> handleTradeUpdates(UpdateEvent updateEvent, Predicate<Trade> filter, RedBlackBST<Trade, Trade> trades) {
+        Map<String, Trade> updated = new HashMap<>();
         boolean snapshot = updateEvent.getType() == UpdateEvent.Type.SNAPSHOT;
         if (snapshot) {
             trades.clear();
@@ -151,7 +149,7 @@ public class TradeReportService {
             }
             if ((tradeDeleted || tradeUpdated) && !snapshot) {
                 Trade changed = tradeUpdated ? trade : event.getOldValue();
-                updated.add(changed);
+                updated.put(changed.getTradeId(), changed);
             }
         }
         log.info("Processed");

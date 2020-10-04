@@ -1,7 +1,8 @@
 package com.grid.sandbox;
 
 import com.grid.sandbox.model.Trade;
-import com.grid.sandbox.service.ServerTradeCacheListener;
+import com.grid.sandbox.service.ClusterLifecycleListenerService;
+import com.grid.sandbox.service.TradeUpdateFeedService;
 import com.hazelcast.config.*;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
@@ -29,7 +30,21 @@ public class MockServerConfig {
     private String instanceName;
 
     @Bean
-    public Config getHazelcastServerConfig() {
+    public ClusterLifecycleListenerService lifecycleListenerService() {
+        return new ClusterLifecycleListenerService();
+    }
+
+    @Bean
+    public TradeUpdateFeedService tradeUpdateFeedService() {
+        TradeUpdateFeedService service = new TradeUpdateFeedService();
+        service.init();
+        return service;
+    }
+
+    @Bean
+    public Config getHazelcastServerConfig(ClusterLifecycleListenerService lifecycleListenerService,
+                                           TradeUpdateFeedService tradeUpdateFeedService)
+    {
         Config config = new Config();
         config.setClusterName("sandbox");
 
@@ -44,12 +59,14 @@ public class MockServerConfig {
             join.getTcpIpConfig().addMember(address);
         }
 
+        config.getListenerConfigs().add(new ListenerConfig().setImplementation(lifecycleListenerService));
+
         ReplicatedMapConfig replicatedMapConfig = config.getReplicatedMapConfig(TRADE_CACHE);
         replicatedMapConfig.setAsyncFillup(false);
         replicatedMapConfig.getMergePolicyConfig().setPolicy(MergePolicyConfig.DEFAULT_MERGE_POLICY);
         EntryListenerConfig listenerConfig = new EntryListenerConfig();
         listenerConfig.setIncludeValue(true);
-        listenerConfig.setImplementation(new ServerTradeCacheListener());
+        listenerConfig.setImplementation(tradeUpdateFeedService);
         replicatedMapConfig.addEntryListenerConfig(listenerConfig);
 
         return config;

@@ -3,36 +3,28 @@ package com.grid.sandbox.service;
 import com.grid.sandbox.model.ClusterStateChangeEvent;
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.model.UpdateEvent;
-import com.hazelcast.core.EntryAdapter;
 import com.hazelcast.core.EntryEvent;
 import com.hazelcast.core.EntryEventType;
 import com.hazelcast.replicatedmap.ReplicatedMap;
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
 import io.reactivex.subjects.BehaviorSubject;
-import io.reactivex.subjects.PublishSubject;
 import io.reactivex.subjects.Subject;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
 
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 @Service
 @Log4j2
-public class TradeFeedService extends EntryAdapter<String, Trade> {
+public class TradeFeedService {
     private static final int REFRESH_INTERVAL = 10;
-    private final AtomicReference<UUID> cacheSubId = new AtomicReference<>();
-    private final BlockingQueue<EntryEvent<String, Trade>> eventQueue = new ArrayBlockingQueue<>(Character.MAX_VALUE);
-    private final PublishSubject<UpdateEvent> tradeUpdates = PublishSubject.create();
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Subject<ConcurrentMap<String, Trade>> snapshotPublisher = BehaviorSubject.create();
     private final Flowable<ConcurrentMap<String, Trade>> snapshotFlowable = snapshotPublisher.toFlowable(BackpressureStrategy.LATEST);
     private final AtomicLong lastUpdateTime = new AtomicLong();
@@ -45,11 +37,11 @@ public class TradeFeedService extends EntryAdapter<String, Trade> {
     @Autowired
     private ClusterLifecycleListenerService lifecycleListenerService;
 
+    @Autowired
+    private TradeUpdateFeedService tradeUpdateFeedService;
+
     @PostConstruct
     private void init() {
-        cacheSubId.set(tradeCache.addEntryListener(this));
-        executor.execute(this::updateHandler);
-
         lifecycleListenerService.getClusterStateFeed().subscribe(lifecycleEvent -> {
             log.info("Cluster event {}", lifecycleEvent);
 
@@ -77,14 +69,13 @@ public class TradeFeedService extends EntryAdapter<String, Trade> {
                             })
                             .filter(event -> !event.getUpdates().isEmpty());
 
-                    Flowable<UpdateEvent> quickUpdates = tradeUpdates.toFlowable(BackpressureStrategy.BUFFER);
-                    return Flowable.merge(quickUpdates, periodicUpdates)
+                    return Flowable.merge(tradeUpdateFeedService.getTradeUpdateFeed(), periodicUpdates)
                             .map(event -> {
                                 applyUpdateEvent(event, snapshot);
                                 return event;
                             });
                 }
-        );
+        ).share();
         updateEventFlowable.subscribe();
     }
 
@@ -97,7 +88,7 @@ public class TradeFeedService extends EntryAdapter<String, Trade> {
             Trade updatedTrade = entry.getValue().getValue();
             if (updatedTrade != null) {
                 if (old == null || old.getLastUpdateTimestamp() <= updatedTrade.getLastUpdateTimestamp()) {
-                    log.info("Snapshot update {}", updatedTrade);
+                    log.info("Snapshot update {} \n old: {}", updatedTrade, old);
                     allTrades.put(entry.getKey(), updatedTrade);
                     entry.setValue(updateEvent(entry.getValue(), old, updatedTrade));
                 } else {
@@ -109,32 +100,6 @@ public class TradeFeedService extends EntryAdapter<String, Trade> {
                 allTrades.remove(entry.getKey());
             }
         }
-    }
-
-    @Override
-    public void onEntryEvent(EntryEvent<String, Trade> event) {
-        log.info("Cache event received " + event);
-        eventQueue.add(event);
-    }
-
-    private void updateHandler() {
-        log.info("Event handler started");
-        try {
-            while (true) {
-                EntryEvent<String, Trade> event = eventQueue.take();
-                ArrayList<EntryEvent<String, Trade>> updates = new ArrayList<>();
-                updates.add(event);
-                eventQueue.drainTo(updates);
-                Map<String, EntryEvent<String, Trade>> events = new HashMap<>();
-                updates.forEach(updateEvent -> events.put(updateEvent.getKey(), updateEvent));
-                UpdateEvent updateEvent = new UpdateEvent(events, UpdateEvent.Type.INCREMENTAL);
-                log.info("Event update published: {}", updateEvent);
-                tradeUpdates.onNext(updateEvent);
-            }
-        } catch (InterruptedException e) {
-            log.error("Error happens while listening to cache update event queue", e);
-        }
-        log.info("Event handler stopped");
     }
 
     public Flowable<UpdateEvent> getTradeFeed() {
@@ -154,19 +119,10 @@ public class TradeFeedService extends EntryAdapter<String, Trade> {
     }
 
     private static EntryEvent<String, Trade> updateEvent(EntryEvent<String, Trade> event, Trade old, Trade updated) {
-        return new EntryEvent<String, Trade>(event.getSource(), event.getMember(), event.getEventType().getType(), event.getKey(), old, updated);
+        return new EntryEvent<>(event.getSource(), event.getMember(), event.getEventType().getType(), event.getKey(), old, updated);
     }
 
     private static EntryEvent<String, Trade> createAddEvent(Trade updated) {
-        return new EntryEvent<String, Trade>("tradeCache", null, EntryEventType.ADDED.getType(), updated.getTradeId(), updated);
+        return new EntryEvent<>("tradeCache", null, EntryEventType.ADDED.getType(), updated.getTradeId(), updated);
     }
-
-    @PreDestroy
-    private void unsubscribe() {
-        UUID subscritpionId = cacheSubId.get();
-        if(subscritpionId != null && cacheSubId.compareAndSet(subscritpionId, null)) {
-            tradeCache.removeEntryListener(subscritpionId);
-        }
-    }
-
 }

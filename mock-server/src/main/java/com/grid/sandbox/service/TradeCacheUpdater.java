@@ -44,11 +44,11 @@ public class TradeCacheUpdater {
 
     public void generateTradeHistory(int size) {
         log.info("Generate new trades: {}", size);
-        Map<String, Trade> trades = IntStream.of(size)
+        Map<String, Trade> trades = IntStream.range(0, size)
                 .mapToObj(i -> generateNewTrade())
                 .collect(Collectors.toMap(Trade::getTradeId, trade -> trade));
         tradeCache.putAll(trades);
-        log.info("Generated");
+        log.info("Generated: {}", trades.size());
     }
 
 
