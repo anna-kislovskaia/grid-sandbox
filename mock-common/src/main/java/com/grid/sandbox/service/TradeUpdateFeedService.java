@@ -22,7 +22,7 @@ import java.util.concurrent.Executors;
 public class TradeUpdateFeedService extends EntryAdapter<String, Trade> {
     private final PublishSubject<UpdateEvent> tradeUpdates = PublishSubject.create();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final BlockingQueue<EntryEvent<String, Trade>> eventQueue = new ArrayBlockingQueue<>(Character.MAX_VALUE);
+    private final BlockingQueue<EntryEvent<String, Trade>> eventQueue = new ArrayBlockingQueue<>(1_000_000);
 
     @PostConstruct
     public void init() {
@@ -31,7 +31,7 @@ public class TradeUpdateFeedService extends EntryAdapter<String, Trade> {
 
     @Override
     public void onEntryEvent(EntryEvent<String, Trade> event) {
-        log.info("Cache event received " + event);
+        log.debug("Cache event received {}", event);
         eventQueue.add(event);
     }
 
