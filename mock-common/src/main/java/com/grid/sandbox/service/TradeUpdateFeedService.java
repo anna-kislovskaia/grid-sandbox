@@ -2,6 +2,7 @@ package com.grid.sandbox.service;
 
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.model.UpdateEvent;
+import com.grid.sandbox.model.UpdateEventEntry;
 import com.hazelcast.core.EntryAdapter;
 import com.hazelcast.core.EntryEvent;
 import io.reactivex.BackpressureStrategy;
@@ -20,7 +21,7 @@ import java.util.concurrent.Executors;
 
 @Log4j2
 public class TradeUpdateFeedService extends EntryAdapter<String, Trade> {
-    private final PublishSubject<UpdateEvent> tradeUpdates = PublishSubject.create();
+    private final PublishSubject<UpdateEvent<String, Trade>> tradeUpdates = PublishSubject.create();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final BlockingQueue<EntryEvent<String, Trade>> eventQueue = new ArrayBlockingQueue<>(1_000_000);
 
@@ -43,9 +44,10 @@ public class TradeUpdateFeedService extends EntryAdapter<String, Trade> {
                 ArrayList<EntryEvent<String, Trade>> updates = new ArrayList<>();
                 updates.add(event);
                 eventQueue.drainTo(updates);
-                Map<String, EntryEvent<String, Trade>> events = new HashMap<>();
-                updates.forEach(updateEvent -> events.put(updateEvent.getKey(), updateEvent));
-                UpdateEvent updateEvent = new UpdateEvent(events, UpdateEvent.Type.INCREMENTAL);
+                Map<String, UpdateEventEntry<String, Trade>> events = new HashMap<>();
+                updates.forEach(updateEvent -> events.put(updateEvent.getKey(),
+                        new UpdateEventEntry<>(updateEvent.getKey(), updateEvent.getValue(), updateEvent.getOldValue())));
+                UpdateEvent<String, Trade> updateEvent = new UpdateEvent<>(events, UpdateEvent.Type.INCREMENTAL);
                 log.info("Event update published: {}", updateEvent);
                 tradeUpdates.onNext(updateEvent);
             }
@@ -55,7 +57,7 @@ public class TradeUpdateFeedService extends EntryAdapter<String, Trade> {
         log.info("Event handler stopped");
     }
 
-    public Flowable<UpdateEvent> getTradeUpdateFeed() {
+    public Flowable<UpdateEvent<String, Trade>> getTradeUpdateFeed() {
         return tradeUpdates.toFlowable(BackpressureStrategy.BUFFER);
     }
 }

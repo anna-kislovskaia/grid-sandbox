@@ -2,7 +2,10 @@ package com.grid.sandbox.controller;
 
 import com.grid.sandbox.model.PageUpdate;
 import com.grid.sandbox.model.Trade;
+import com.grid.sandbox.service.KeyOrderedSchedulerService;
 import com.grid.sandbox.service.TradeReportService;
+import io.reactivex.Scheduler;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -12,6 +15,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.context.request.RequestContextHolder;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -20,6 +24,7 @@ import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+@Log4j2
 @Controller
 @RequestMapping("/trades")
 public class TradeController {
@@ -29,13 +34,16 @@ public class TradeController {
     @Autowired
     private TradeReportService tradeReportService;
 
+    @Autowired
+    private KeyOrderedSchedulerService keyOrderedSchedulerService;
+
     @GetMapping(path = "/open", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<PageUpdate<Trade>> getOpenTrades(@RequestParam Optional<Integer> page,
                                                  @RequestParam Optional<Integer> size,
                                                  @RequestParam Optional<List<String>> sort)
     {
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
-        return Flux.from(tradeReportService.getTrades(request, OPEN_TRADES));
+        return Flux.from(tradeReportService.getTrades(request, OPEN_TRADES, getSessionScheduler()));
     }
 
     @GetMapping(path = "/all", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -44,7 +52,7 @@ public class TradeController {
                                                  @RequestParam Optional<List<String>> sort)
     {
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
-        return Flux.from(tradeReportService.getTrades(request, (trade) -> true));
+        return Flux.from(tradeReportService.getTrades(request, (trade) -> true, getSessionScheduler()));
     }
 
     public static Pageable getPagebleRequest(Optional<Integer> page, Optional<Integer> size, Sort sort) {
@@ -56,6 +64,7 @@ public class TradeController {
     }
 
     public static Sort parseSort(Optional<List<String>> sortSettings) {
+        log.info("Parse sort {}", sortSettings);
         return sortSettings.map(sorting -> {
             List<Sort.Order> orders = sorting.stream()
                     .map(orderSettings -> {
@@ -69,7 +78,13 @@ public class TradeController {
                     })
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
+            log.info("Sort parsed {}", orders);
             return Sort.by(orders);
         }).orElse(Sort.unsorted());
+    }
+
+    private Scheduler getSessionScheduler() {
+        String sessionId = RequestContextHolder.currentRequestAttributes().getSessionId();
+        return keyOrderedSchedulerService.getScheduler(sessionId);
     }
 }

@@ -12,12 +12,12 @@ import java.util.StringJoiner;
 @Data
 @AllArgsConstructor
 @Getter
-public class UpdateEvent {
+public class UpdateEvent<K, V> {
     public enum Type {
         SNAPSHOT, INCREMENTAL, INITIAL
     }
 
-    private final Map<String, EntryEvent<String, Trade>> updates;
+    private final Map<K, UpdateEventEntry<K, V>> updates;
     private final Type type;
 
     @Override

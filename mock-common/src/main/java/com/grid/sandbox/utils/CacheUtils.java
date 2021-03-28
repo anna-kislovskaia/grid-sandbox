@@ -3,6 +3,7 @@ package com.grid.sandbox.utils;
 import com.grid.sandbox.model.Trade;
 
 import java.util.Comparator;
+import java.util.function.Function;
 
 public class CacheUtils {
     public static final String TRADE_CACHE = "Trades";
@@ -20,4 +21,5 @@ public class CacheUtils {
                 return result;
             };
 
+    public static Function<Trade, String> TRADE_KEY_MAPPER = Trade::getTradeId;
 }

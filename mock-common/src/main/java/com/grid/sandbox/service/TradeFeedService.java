@@ -3,8 +3,7 @@ package com.grid.sandbox.service;
 import com.grid.sandbox.model.ClusterStateChangeEvent;
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.model.UpdateEvent;
-import com.hazelcast.core.EntryEvent;
-import com.hazelcast.core.EntryEventType;
+import com.grid.sandbox.model.UpdateEventEntry;
 import com.hazelcast.replicatedmap.ReplicatedMap;
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
@@ -29,7 +28,7 @@ public class TradeFeedService {
     private final Flowable<ConcurrentMap<String, Trade>> snapshotFlowable = snapshotPublisher.toFlowable(BackpressureStrategy.LATEST);
     private final AtomicLong lastUpdateTime = new AtomicLong();
 
-    private Flowable<UpdateEvent>  updateEventFlowable;
+    private Flowable<UpdateEvent<String, Trade>>  updateEventFlowable;
 
     @Autowired
     private ReplicatedMap<String, Trade> tradeCache;
@@ -56,16 +55,17 @@ public class TradeFeedService {
         });
 
         updateEventFlowable = snapshotFlowable.switchMap(snapshot -> {
-                    Flowable<UpdateEvent> periodicUpdates = Flowable.interval(REFRESH_INTERVAL, TimeUnit.SECONDS)
+                    Flowable<UpdateEvent<String, Trade>> periodicUpdates = Flowable.interval(REFRESH_INTERVAL, TimeUnit.SECONDS)
                             .map(i -> {
                                 log.info("Loading periodic updates");
                                 long lastRefresh = lastUpdateTime.getAndSet(System.currentTimeMillis());
-                                Map<String, EntryEvent<String, Trade>> updates = tradeCache.values().stream()
+                                Map<String, UpdateEventEntry<String, Trade>> updates = tradeCache.values().stream()
                                         .filter(trade -> trade.getLastUpdateTimestamp() >= lastRefresh)
                                         .map(TradeFeedService::createAddEvent)
-                                        .collect(Collectors.toMap(EntryEvent::getKey, event -> event));
+                                        .collect(Collectors.toMap(UpdateEventEntry::getKey, event -> event));
+
                                 log.info("Refresh event: {}", updates.size());
-                                return new UpdateEvent(updates, UpdateEvent.Type.INCREMENTAL);
+                                return new UpdateEvent<String, Trade>(updates, UpdateEvent.Type.INCREMENTAL);
                             })
                             .filter(event -> !event.getUpdates().isEmpty());
 
@@ -79,11 +79,11 @@ public class TradeFeedService {
         updateEventFlowable.subscribe();
     }
 
-    private void applyUpdateEvent(UpdateEvent event, ConcurrentMap<String, Trade> allTrades) {
+    private void applyUpdateEvent(UpdateEvent<String, Trade> event, ConcurrentMap<String, Trade> allTrades) {
         log.info("Apply update event: {}", event.toShortString());
-        Map<String, EntryEvent<String, Trade>> updates = event.getUpdates();
-        for (Iterator<Map.Entry<String, EntryEvent<String, Trade>>> iterator = updates.entrySet().iterator(); iterator.hasNext();) {
-            Map.Entry<String, EntryEvent<String, Trade>> entry = iterator.next();
+        Map<String, UpdateEventEntry<String, Trade>> updates = event.getUpdates();
+        for (Iterator<Map.Entry<String, UpdateEventEntry<String, Trade>>> iterator = updates.entrySet().iterator(); iterator.hasNext();) {
+            Map.Entry<String, UpdateEventEntry<String, Trade>> entry = iterator.next();
             Trade old = allTrades.get(entry.getKey());
             Trade updatedTrade = entry.getValue().getValue();
             if (updatedTrade != null) {
@@ -102,27 +102,27 @@ public class TradeFeedService {
         }
     }
 
-    public Flowable<UpdateEvent> getTradeFeed() {
-        Flowable<UpdateEvent> snapshotFeed = snapshotPublisher
+    public Flowable<UpdateEvent<String, Trade>> getTradeFeed() {
+        Flowable<UpdateEvent<String, Trade>> snapshotFeed = snapshotPublisher
                 .toFlowable(BackpressureStrategy.LATEST)
                 .map(snapshot -> {
-                    Map<String, EntryEvent<String, Trade>> eventSnapshot = snapshot.values().stream()
+                    Map<String, UpdateEventEntry<String, Trade>> eventSnapshot = snapshot.values().stream()
                             .map(TradeFeedService::createAddEvent)
-                            .collect(Collectors.toMap(EntryEvent::getKey, event -> event));
-                    return new UpdateEvent(eventSnapshot, UpdateEvent.Type.SNAPSHOT);
+                            .collect(Collectors.toMap(UpdateEventEntry::getKey, event -> event));
+                    return new UpdateEvent<>(eventSnapshot, UpdateEvent.Type.SNAPSHOT);
                 });
 
         return snapshotFeed.switchMap(snapshot -> {
-            Flowable<UpdateEvent> snapshotEvent = Flowable.just(snapshot);
+            Flowable<UpdateEvent<String, Trade>> snapshotEvent = Flowable.just(snapshot);
             return Flowable.merge(snapshotEvent, updateEventFlowable);
         });
     }
 
-    private static EntryEvent<String, Trade> updateEvent(EntryEvent<String, Trade> event, Trade old, Trade updated) {
-        return new EntryEvent<>(event.getSource(), event.getMember(), event.getEventType().getType(), event.getKey(), old, updated);
+    private static UpdateEventEntry<String, Trade> updateEvent(UpdateEventEntry<String, Trade> event, Trade old, Trade updated) {
+        return new UpdateEventEntry<>(event.getKey(), updated, old);
     }
 
-    private static EntryEvent<String, Trade> createAddEvent(Trade updated) {
-        return new EntryEvent<>("tradeCache", null, EntryEventType.ADDED.getType(), updated.getTradeId(), updated);
+    private static UpdateEventEntry<String, Trade> createAddEvent(Trade updated) {
+        return new UpdateEventEntry<>(updated.getTradeId(), updated, null);
     }
 }

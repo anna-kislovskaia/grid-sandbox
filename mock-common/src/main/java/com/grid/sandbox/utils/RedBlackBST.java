@@ -1,4 +1,6 @@
-package com.grid.sandbox.utils; /******************************************************************************
+package com.grid.sandbox.utils;
+
+/******************************************************************************
  *  Compilation:  javac RedBlackBST.java
  *  Execution:    java RedBlackBST < input.txt
  *  Dependencies: StdIn.java StdOut.java
