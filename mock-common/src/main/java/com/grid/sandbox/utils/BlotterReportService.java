@@ -118,7 +118,7 @@ public class BlotterReportService<K, V> {
             sortedValues.clear();
         }
         log.info("Processing trade update: {} {}", snapshot, updateEvent.getUpdates().size());
-        for (UpdateEventEntry<K, V> event : updateEvent.getUpdates().values()) {
+        for (UpdateEventEntry<K, V> event : updateEvent.getUpdates()) {
             boolean valueDeleted = event.getOldValue() != null && sortedValues.delete(event.getOldValue()) != null;
             V value = event.getValue();
             boolean valueUpdated = value != null && filter.test(value);

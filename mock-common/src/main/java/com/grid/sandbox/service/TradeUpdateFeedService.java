@@ -13,11 +13,13 @@ import lombok.extern.log4j.Log4j2;
 import javax.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 @Log4j2
 public class TradeUpdateFeedService extends EntryAdapter<String, Trade> {
@@ -44,9 +46,10 @@ public class TradeUpdateFeedService extends EntryAdapter<String, Trade> {
                 ArrayList<EntryEvent<String, Trade>> updates = new ArrayList<>();
                 updates.add(event);
                 eventQueue.drainTo(updates);
-                Map<String, UpdateEventEntry<String, Trade>> events = new HashMap<>();
-                updates.forEach(updateEvent -> events.put(updateEvent.getKey(),
-                        new UpdateEventEntry<>(updateEvent.getKey(), updateEvent.getValue(), updateEvent.getOldValue())));
+                List<UpdateEventEntry<String, Trade>> events = updates.stream()
+                        .map(updateEvent ->
+                            new UpdateEventEntry<>(updateEvent.getKey(), updateEvent.getValue(), updateEvent.getOldValue()))
+                        .collect(Collectors.toList());
                 UpdateEvent<String, Trade> updateEvent = new UpdateEvent<>(events, UpdateEvent.Type.INCREMENTAL);
                 log.info("Event update published: {}", updateEvent);
                 tradeUpdates.onNext(updateEvent);

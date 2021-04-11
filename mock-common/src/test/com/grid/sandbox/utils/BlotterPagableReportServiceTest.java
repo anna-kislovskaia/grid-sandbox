@@ -1,6 +1,5 @@
 package com.grid.sandbox.utils;
 
-import com.grid.sandbox.controller.UnpagedRequest;
 import com.grid.sandbox.model.*;
 import io.reactivex.Flowable;
 import io.reactivex.functions.Consumer;
@@ -56,13 +55,13 @@ class BlotterPagableReportServiceTest {
         testTrades.add(new Trade("15", BigDecimal.valueOf(900), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
 
         snapshot = testTrades.stream()
-                .collect(Collectors.toMap(Trade::getTradeId, trade -> new UpdateEventEntry<>(trade.getTradeId(), trade, null)));
+                .collect(Collectors.toMap(Trade::getTradeId, trade -> createEventEntry(trade, null)));
     }
 
     @Test
     void testSnapshotNoComparators() throws Throwable {
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
-                new UpdateEvent<>(snapshot, UpdateEvent.Type.SNAPSHOT)
+                new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT)
         );
         BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(
                 feed, TRADE_KEY_MAPPER, SAME_THREAD_SCHEDULER);
@@ -82,7 +81,7 @@ class BlotterPagableReportServiceTest {
     @Test
     void testSnapshotClientBalanceComparator() throws Throwable {
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
-                new UpdateEvent<>(snapshot, UpdateEvent.Type.SNAPSHOT)
+                new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT)
         );
         Comparator<Trade> comparator = new MultiComparator<>(
                 Comparator.comparing(Trade::getClient),
@@ -110,8 +109,8 @@ class BlotterPagableReportServiceTest {
         Trade trade15 = snapshot.get("15").getValue();
         Trade trade15_upd = trade15.toBuilder().balance(BigDecimal.valueOf(120)).build();
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
-                new UpdateEvent<>(snapshot, UpdateEvent.Type.SNAPSHOT),
-                new UpdateEvent<>(Collections.singletonMap("15", new UpdateEventEntry<>("15", trade15_upd, trade15)), UpdateEvent.Type.INCREMENTAL)
+                new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT),
+                new UpdateEvent<>(Collections.singletonList(createEventEntry(trade15_upd, trade15)), UpdateEvent.Type.INCREMENTAL)
         );
         Comparator<Trade> comparator = new MultiComparator<>(
                 Comparator.comparing(Trade::getClient),
@@ -143,12 +142,12 @@ class BlotterPagableReportServiceTest {
         Trade trade5 = snapshot.get("5").getValue();
         // client 2 trade within page 1
         Trade trade4 = snapshot.get("4").getValue();
-        Map<String, UpdateEventEntry<String, Trade>> updates = new HashMap<>();
-        updates.put(trade5.getTradeId(), createEventEntry(setStatus(trade5, TradeStatus.CANCELLED), trade5));
-        updates.put(trade4.getTradeId(), createEventEntry(setStatus(trade4, TradeStatus.CANCELLED), trade4));
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
-                new UpdateEvent<>(snapshot, UpdateEvent.Type.SNAPSHOT),
-                new UpdateEvent<>(updates, UpdateEvent.Type.INCREMENTAL)
+                new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT),
+                new UpdateEvent<>(Arrays.asList(
+                        createEventEntry(setStatus(trade5, TradeStatus.CANCELLED), trade5),
+                        createEventEntry(setStatus(trade4, TradeStatus.CANCELLED), trade4)
+                ), UpdateEvent.Type.INCREMENTAL)
         );
         Comparator<Trade> comparator = new MultiComparator<>(
                 Comparator.comparing(Trade::getClient),

@@ -11,6 +11,7 @@
 
 	<properties>
 		<junit.version>5.7.1</junit.version>
+		<mockito.version>2.23.0</mockito.version>
 		<jsr305.version>3.0.1</jsr305.version>
 		<spring.boot.version>2.3.0.RELEASE</spring.boot.version>
 		<spring.version>5.2.6.RELEASE</spring.version>
@@ -29,6 +30,33 @@
         <module>mock-common</module>
         <module>mock-server</module>
 	</modules>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-api</artifactId>
+			<version>${junit.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<version>${junit.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.vintage</groupId>
+			<artifactId>junit-vintage-engine</artifactId>
+			<version>${junit.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.platform</groupId>
+			<artifactId>junit-platform-launcher</artifactId>
+			<version>1.7.0</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
 
     <build>
         <pluginManagement>

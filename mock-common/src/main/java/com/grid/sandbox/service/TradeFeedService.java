@@ -59,10 +59,10 @@ public class TradeFeedService {
                             .map(i -> {
                                 log.info("Loading periodic updates");
                                 long lastRefresh = lastUpdateTime.getAndSet(System.currentTimeMillis());
-                                Map<String, UpdateEventEntry<String, Trade>> updates = tradeCache.values().stream()
+                                List<UpdateEventEntry<String, Trade>> updates = tradeCache.values().stream()
                                         .filter(trade -> trade.getLastUpdateTimestamp() >= lastRefresh)
                                         .map(TradeFeedService::createAddEvent)
-                                        .collect(Collectors.toMap(UpdateEventEntry::getKey, event -> event));
+                                        .collect(Collectors.toList());
 
                                 log.info("Refresh event: {}", updates.size());
                                 return new UpdateEvent<String, Trade>(updates, UpdateEvent.Type.INCREMENTAL);
@@ -81,16 +81,16 @@ public class TradeFeedService {
 
     private void applyUpdateEvent(UpdateEvent<String, Trade> event, ConcurrentMap<String, Trade> allTrades) {
         log.info("Apply update event: {}", event.toShortString());
-        Map<String, UpdateEventEntry<String, Trade>> updates = event.getUpdates();
-        for (Iterator<Map.Entry<String, UpdateEventEntry<String, Trade>>> iterator = updates.entrySet().iterator(); iterator.hasNext();) {
-            Map.Entry<String, UpdateEventEntry<String, Trade>> entry = iterator.next();
+        List<UpdateEventEntry<String, Trade>> updates = event.getUpdates();
+        for (ListIterator<UpdateEventEntry<String, Trade>> iterator = updates.listIterator(); iterator.hasNext();) {
+            UpdateEventEntry<String, Trade> entry = iterator.next();
             Trade old = allTrades.get(entry.getKey());
-            Trade updatedTrade = entry.getValue().getValue();
+            Trade updatedTrade = entry.getValue();
             if (updatedTrade != null) {
                 if (old == null || old.getLastUpdateTimestamp() <= updatedTrade.getLastUpdateTimestamp()) {
                     log.info("Snapshot update {} \n old: {}", updatedTrade, old);
                     allTrades.put(entry.getKey(), updatedTrade);
-                    entry.setValue(updateEvent(entry.getValue(), old, updatedTrade));
+                    iterator.set(updateEvent(entry, old, updatedTrade));
                 } else {
                     log.info("Stale update {}", updatedTrade);
                     iterator.remove();
@@ -106,9 +106,9 @@ public class TradeFeedService {
         Flowable<UpdateEvent<String, Trade>> snapshotFeed = snapshotPublisher
                 .toFlowable(BackpressureStrategy.LATEST)
                 .map(snapshot -> {
-                    Map<String, UpdateEventEntry<String, Trade>> eventSnapshot = snapshot.values().stream()
+                    List<UpdateEventEntry<String, Trade>> eventSnapshot = snapshot.values().stream()
                             .map(TradeFeedService::createAddEvent)
-                            .collect(Collectors.toMap(UpdateEventEntry::getKey, event -> event));
+                            .collect(Collectors.toList());
                     return new UpdateEvent<>(eventSnapshot, UpdateEvent.Type.SNAPSHOT);
                 });
 

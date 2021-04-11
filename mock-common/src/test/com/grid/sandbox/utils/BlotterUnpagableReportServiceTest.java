@@ -54,13 +54,13 @@ class BlotterUnpagableReportServiceTest {
         testTrades.add(new Trade("15", BigDecimal.valueOf(900), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
 
         snapshot = testTrades.stream()
-                .collect(Collectors.toMap(Trade::getTradeId, trade -> new UpdateEventEntry<>(trade.getTradeId(), trade, null)));
+                .collect(Collectors.toMap(Trade::getTradeId, trade -> createEventEntry(trade, null)));
     }
 
     @Test
     void testSnapshotNoComparators() throws Throwable {
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
-                new UpdateEvent<>(snapshot, UpdateEvent.Type.SNAPSHOT)
+                new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT)
         );
         BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(
                 feed, TRADE_KEY_MAPPER, SAME_THREAD_SCHEDULER);
@@ -77,7 +77,7 @@ class BlotterUnpagableReportServiceTest {
     @Test
     void testSnapshotClientBalanceComparator() throws Throwable {
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
-                new UpdateEvent<>(snapshot, UpdateEvent.Type.SNAPSHOT)
+                new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT)
         );
         Comparator<Trade> comparator = new MultiComparator<>(
                 Comparator.comparing(Trade::getClient),
@@ -108,8 +108,8 @@ class BlotterUnpagableReportServiceTest {
         Trade client1_1 = snapshot.get("1").getValue();
         Trade client1_1_upd = client1_1.toBuilder().balance(BigDecimal.valueOf(700)).build();
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
-                new UpdateEvent<>(snapshot, UpdateEvent.Type.SNAPSHOT),
-                new UpdateEvent<>(Collections.singletonMap("1", createEventEntry(client1_1_upd, client1_1)), UpdateEvent.Type.INCREMENTAL)
+                new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT),
+                new UpdateEvent<>(Collections.singletonList(createEventEntry(client1_1_upd, client1_1)), UpdateEvent.Type.INCREMENTAL)
         );
         Comparator<Trade> comparator = new MultiComparator<>(
                 Comparator.comparing(Trade::getClient),
@@ -135,8 +135,8 @@ class BlotterUnpagableReportServiceTest {
         Trade trade10 = snapshot.get("10").getValue();
         Trade trade10_upd = trade10.toBuilder().status(TradeStatus.CANCELLED).build();
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
-                new UpdateEvent<>(snapshot, UpdateEvent.Type.SNAPSHOT),
-                new UpdateEvent<>(Collections.singletonMap("10", createEventEntry(trade10_upd, trade10)), UpdateEvent.Type.INCREMENTAL)
+                new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT),
+                new UpdateEvent<>(Collections.singletonList(createEventEntry(trade10_upd, trade10)), UpdateEvent.Type.INCREMENTAL)
         );
         Comparator<Trade> comparator = new MultiComparator<>(
                 Comparator.comparing(Trade::getClient),
