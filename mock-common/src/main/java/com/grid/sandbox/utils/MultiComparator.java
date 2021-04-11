@@ -1,6 +1,7 @@
 package com.grid.sandbox.utils;
 
 
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
@@ -9,6 +10,10 @@ public class MultiComparator<V> implements Comparator<V> {
 
     public MultiComparator(List<Comparator<V>> comparators) {
         this.comparators = comparators;
+    }
+
+    public MultiComparator(Comparator<V>... comparators) {
+        this.comparators = Arrays.asList(comparators);
     }
 
     @Override
