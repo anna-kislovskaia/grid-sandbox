@@ -6,7 +6,10 @@ import com.grid.sandbox.model.UpdateEventEntry;
 import io.reactivex.Scheduler;
 import io.reactivex.schedulers.Schedulers;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.function.Predicate;
 
@@ -15,10 +18,29 @@ public class TestHelpers {
     static final Executor SAME_THREAD_EXECUTOR = Runnable::run;
     static final Scheduler SAME_THREAD_SCHEDULER = Schedulers.from(SAME_THREAD_EXECUTOR);
     static final Comparator<Trade> ID_COMPARATOR = Comparator.comparing(Trade::getTradeId);
-    static final Predicate<Trade> ACCEPT_ALL = trade -> true;
-    static final Predicate<Trade> ACCEPT_OPENED = trade -> !trade.getStatus().isFinal();
     static Trade setStatus(Trade trade, TradeStatus status) { return trade.toBuilder().status(status).build();};
     static UpdateEventEntry<String, Trade> createEventEntry(Trade trade, Trade old) {
         return new UpdateEventEntry(trade.getTradeId(), trade, old);
+    }
+
+    static List<Trade> generateTrades() {
+        ArrayList<Trade> testTrades = new ArrayList<>();
+
+        testTrades.add(new Trade("1",  BigDecimal.valueOf(500), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("2",  BigDecimal.valueOf(600), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("3",  BigDecimal.valueOf(533), "client 2", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("4",  BigDecimal.valueOf(500), "client 2", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("5",  BigDecimal.valueOf(100), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("6",  BigDecimal.valueOf(200), "client 4", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("7",  BigDecimal.valueOf(300), "client 4", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("8",  BigDecimal.valueOf(400), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("9",  BigDecimal.valueOf(500), "client 3", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("10", BigDecimal.valueOf(500), "client 4", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("11", BigDecimal.valueOf(220), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("12", BigDecimal.valueOf(560), "client 2", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("13", BigDecimal.valueOf(700), "client 3", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("14", BigDecimal.valueOf(800), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
+        testTrades.add(new Trade("15", BigDecimal.valueOf(900), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
+        return testTrades;
     }
 }

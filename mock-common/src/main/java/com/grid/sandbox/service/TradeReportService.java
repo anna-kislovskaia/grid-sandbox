@@ -1,12 +1,11 @@
 package com.grid.sandbox.service;
 
 import com.grid.sandbox.model.PageUpdate;
+import com.grid.sandbox.model.ReportSubscription;
 import com.grid.sandbox.model.Trade;
-import com.grid.sandbox.utils.BlotterReportService;
-import com.grid.sandbox.utils.CacheUtils;
-import com.grid.sandbox.utils.MultiComparator;
+import com.grid.sandbox.utils.*;
 import io.reactivex.Flowable;
-import io.reactivex.Scheduler;
+import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
@@ -28,12 +27,32 @@ public class TradeReportService {
     @Autowired
     private ComparatorsService comparatorsService;
 
-    public Flowable<PageUpdate<Trade>> getTrades(Pageable request, Predicate<Trade> filter, Scheduler scheduler) {
-        Comparator<Trade> comparator = getTradeComparatorBySort(request.getSort());
 
+    public Flowable<PageUpdate<Trade>> getTrades(ReportSubscription<Trade> subscription, Predicate<Trade> reportFilter) {
+        FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
+                tradeFeedService.getTradeFeed(), CacheUtils.getTradeFilterOptionBuilder(), reportFilter, subscription.getScheduler());
         BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(
-                tradeFeedService.getTradeFeed(), TRADE_KEY_MAPPER, scheduler);
-        return blotterReportService.getReport(request, filter, comparator);
+                tradeFeedService.getTradeFeed(), TRADE_KEY_MAPPER, subscription.getScheduler());
+
+        Flowable<Predicate<Trade>> compositeFilterFeed = subscription.getUserFilterFeed().map(userFilter ->
+                userFilter == null ? reportFilter : new MultiPredicate<>(Arrays.asList(reportFilter, userFilter))
+        );
+        Flowable<PageUpdate<Trade>> valueFeed = Flowable
+                .combineLatest(subscription.getRequestFeed(), compositeFilterFeed, RequestParams::new)
+                .switchMap(params -> {
+                    Comparator<Trade> comparator = getTradeComparatorBySort(params.request.getSort());
+                    return blotterReportService.getReport(params.request, params.filter, comparator);
+                });
+
+        return Flowable.combineLatest(
+                filterOptionService.getFilterOptions(),
+                valueFeed,
+                (filters, pageUpdate) -> pageUpdate.toBuilder()
+                        .filterOptions(filters)
+                        .subscriptionId(subscription.getSubscriptionId())
+                        .build()
+        );
+
     }
 
     private MultiComparator<Trade> getTradeComparatorBySort(Sort sort) {
@@ -50,6 +69,12 @@ public class TradeReportService {
         // unique comparator
         comparators.add(CacheUtils.TRADE_ID_COMPARATOR);
         return new MultiComparator<>(comparators);
+    }
+
+    @AllArgsConstructor
+    private static class RequestParams {
+        private Pageable request;
+        private Predicate<Trade> filter;
     }
 
 }

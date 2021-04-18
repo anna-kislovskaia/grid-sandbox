@@ -1,6 +1,7 @@
 package com.grid.sandbox.controller;
 
 import com.grid.sandbox.model.PageUpdate;
+import com.grid.sandbox.model.ReportSubscription;
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.service.KeyOrderedSchedulerService;
 import com.grid.sandbox.service.TradeReportService;
@@ -21,15 +22,19 @@ import reactor.core.publisher.Flux;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Predicate;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+
+import static com.grid.sandbox.utils.CacheUtils.*;
 
 @Log4j2
 @Controller
 @RequestMapping("/trades")
 public class TradeController {
-    private static final Predicate<Trade> OPEN_TRADES = trade -> !trade.getStatus().isFinal();
-
+    private final AtomicInteger subscriptionIdGenerator = new AtomicInteger();
+    private final ConcurrentMap<Integer, ReportSubscription<Trade>> subscriptions = new ConcurrentHashMap<>();
 
     @Autowired
     private TradeReportService tradeReportService;
@@ -43,8 +48,10 @@ public class TradeController {
                                                  @RequestParam Optional<List<String>> sort)
     {
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
-        return Flux.from(tradeReportService.getTrades(request, OPEN_TRADES, getSessionScheduler()));
+        ReportSubscription<Trade> subscription = createSubscription(request);
+        return Flux.from(tradeReportService.getTrades(subscription, ACCEPT_OPENED));
     }
+
 
     @GetMapping(path = "/all", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<PageUpdate<Trade>> getAllTrades(@RequestParam Optional<Integer> page,
@@ -52,7 +59,33 @@ public class TradeController {
                                                  @RequestParam Optional<List<String>> sort)
     {
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
-        return Flux.from(tradeReportService.getTrades(request, (trade) -> true, getSessionScheduler()));
+        ReportSubscription<Trade> subscription = createSubscription(request);
+        return Flux.from(tradeReportService.getTrades(subscription, ACCEPT_ALL));
+    }
+
+    @GetMapping(path = "/params", produces = MediaType.TEXT_PLAIN_VALUE)
+    public void updateSubscription(@RequestParam int subscriptionId,
+                                  @RequestParam Optional<Integer> page,
+                                  @RequestParam Optional<Integer> size,
+                                  @RequestParam Optional<List<String>> sort) {
+
+        Pageable request = getPagebleRequest(page, size, parseSort(sort));
+        ReportSubscription<Trade> subscription = subscriptions.get(subscriptionId);
+        if (subscription != null) {
+            subscription.getPageableSubject().onNext(request);
+        } else {
+            throw new IllegalArgumentException("Subscription " + subscriptionId + " not found");
+        }
+    }
+
+    private ReportSubscription<Trade> createSubscription(Pageable request) {
+        ReportSubscription<Trade> subscription = new ReportSubscription<>(
+                subscriptionIdGenerator.incrementAndGet(),
+                request,
+                ACCEPT_ALL,
+                getSessionScheduler());
+        subscriptions.put(subscription.getSubscriptionId(), subscription);
+        return subscription;
     }
 
     public static Pageable getPagebleRequest(Optional<Integer> page, Optional<Integer> size, Sort sort) {
@@ -87,4 +120,5 @@ public class TradeController {
         String sessionId = RequestContextHolder.currentRequestAttributes().getSessionId();
         return keyOrderedSchedulerService.getScheduler(sessionId);
     }
+
 }

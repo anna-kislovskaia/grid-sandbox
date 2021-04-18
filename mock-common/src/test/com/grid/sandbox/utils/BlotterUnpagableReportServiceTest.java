@@ -16,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static com.grid.sandbox.utils.TestHelpers.*;
+import static com.grid.sandbox.utils.CacheUtils.*;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -29,30 +30,13 @@ class BlotterUnpagableReportServiceTest {
     private List<Trade> testTrades ;
     private Map<String, UpdateEventEntry<String, Trade>> snapshot;
     @Mock
-    private Consumer<PageUpdate> consumer;
+    private Consumer<PageUpdate<Trade>> consumer;
     @Captor
     private ArgumentCaptor<PageUpdate<Trade>> pageUpdateCaptor;
 
     @BeforeEach
     void init() {
-        testTrades = new ArrayList<>();
-
-        testTrades.add(new Trade("1",  BigDecimal.valueOf(500), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("2",  BigDecimal.valueOf(600), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("3",  BigDecimal.valueOf(533), "client 2", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("4",  BigDecimal.valueOf(500), "client 2", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("5",  BigDecimal.valueOf(100), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("6",  BigDecimal.valueOf(200), "client 4", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("7",  BigDecimal.valueOf(300), "client 4", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("8",  BigDecimal.valueOf(400), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("9",  BigDecimal.valueOf(500), "client 3", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("10", BigDecimal.valueOf(500), "client 4", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("11", BigDecimal.valueOf(220), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("12", BigDecimal.valueOf(560), "client 2", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("13", BigDecimal.valueOf(700), "client 3", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("14", BigDecimal.valueOf(800), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
-        testTrades.add(new Trade("15", BigDecimal.valueOf(900), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
-
+        testTrades = generateTrades();
         snapshot = testTrades.stream()
                 .collect(Collectors.toMap(Trade::getTradeId, trade -> createEventEntry(trade, null)));
     }

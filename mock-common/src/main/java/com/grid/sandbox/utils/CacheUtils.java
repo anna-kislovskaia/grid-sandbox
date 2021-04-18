@@ -1,9 +1,14 @@
 package com.grid.sandbox.utils;
 
+import com.grid.sandbox.model.FilterOptionBuilder;
+import com.grid.sandbox.model.FilterOptionBuilderImpl;
 import com.grid.sandbox.model.Trade;
 
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 public class CacheUtils {
     public static final String TRADE_CACHE = "Trades";
@@ -22,4 +27,14 @@ public class CacheUtils {
             };
 
     public static Function<Trade, String> TRADE_KEY_MAPPER = Trade::getTradeId;
+
+    public static final Predicate<Trade> ACCEPT_ALL = trade -> true;
+    public static final Predicate<Trade> ACCEPT_OPENED = trade -> !trade.getStatus().isFinal();
+
+    public static FilterOptionBuilder<Trade> getTradeFilterOptionBuilder() {
+        Map<String, Function<Trade, String>> mappers = new HashMap<>();
+        mappers.put("client", Trade::getClient);
+        mappers.put("status", trade -> trade.getStatus().name());
+        return new FilterOptionBuilderImpl<>(mappers);
+    }
 }

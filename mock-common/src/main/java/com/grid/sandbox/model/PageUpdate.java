@@ -8,7 +8,7 @@ import lombok.Getter;
 import java.util.List;
 
 @AllArgsConstructor
-@Builder(builderClassName = "Builder")
+@Builder(builderClassName = "Builder", toBuilder = true)
 @Getter
 public class PageUpdate<V> {
     @JsonProperty
@@ -28,6 +28,12 @@ public class PageUpdate<V> {
 
     @JsonProperty
     private boolean snapshot;
+
+    @JsonProperty
+    private List<FilterOptionUpdateEntry> filterOptions;
+
+    @JsonProperty
+    private int subscriptionId;
 
     public boolean isEmpty() {
         return updated.isEmpty() && deleted.isEmpty();
