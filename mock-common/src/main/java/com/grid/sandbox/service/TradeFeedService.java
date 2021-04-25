@@ -1,6 +1,5 @@
 package com.grid.sandbox.service;
 
-import com.grid.sandbox.model.ClusterStateChangeEvent;
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.model.UpdateEvent;
 import com.grid.sandbox.model.UpdateEventEntry;

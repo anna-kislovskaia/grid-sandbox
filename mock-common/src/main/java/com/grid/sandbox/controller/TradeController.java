@@ -1,10 +1,11 @@
 package com.grid.sandbox.controller;
 
 import com.grid.sandbox.model.PageUpdate;
-import com.grid.sandbox.model.ReportSubscription;
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.service.KeyOrderedSchedulerService;
+import com.grid.sandbox.service.ReportSubscription;
 import com.grid.sandbox.service.TradeReportService;
+import com.grid.sandbox.utils.MultiPredicate;
 import io.reactivex.Scheduler;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,12 +22,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.context.request.RequestContextHolder;
 import reactor.core.publisher.Flux;
 
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.grid.sandbox.utils.CacheUtils.*;
@@ -53,7 +53,7 @@ public class TradeController {
         ReportSubscription<Trade> subscription = createSubscription(request);
         return Flux.from(
                 tradeReportService.getTrades(subscription, ACCEPT_OPENED)
-                    .doOnTerminate(() -> closeSubscription(subscription.getSubscriptionId()))
+                    .doAfterTerminate(() -> closeSubscription(subscription.getSubscriptionId()))
         );
     }
 
@@ -67,7 +67,7 @@ public class TradeController {
         ReportSubscription<Trade> subscription = createSubscription(request);
         return Flux.from(
                 tradeReportService.getTrades(subscription, ACCEPT_ALL)
-                        .doOnTerminate(() -> closeSubscription(subscription.getSubscriptionId()))
+                        .doAfterTerminate(() -> closeSubscription(subscription.getSubscriptionId()))
         );
     }
 
@@ -75,12 +75,15 @@ public class TradeController {
     public ResponseEntity updateSubscription(@RequestParam int subscriptionId,
                                              @RequestParam Optional<Integer> page,
                                              @RequestParam Optional<Integer> size,
-                                             @RequestParam Optional<List<String>> sort) {
+                                             @RequestParam Optional<List<String>> sort,
+                                             @RequestParam Optional<String> filter) {
 
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
+        Optional<Predicate<Trade>> userFilter = filter.map(TradeController::parseOptionFilter);
         ReportSubscription<Trade> subscription = subscriptions.get(subscriptionId);
         if (subscription != null) {
             subscription.getPageableSubject().onNext(request);
+            userFilter.ifPresent(tradePredicate -> subscription.getUserFilterSubject().onNext(tradePredicate));
         } else {
             return ResponseEntity.notFound().build();
         }
@@ -102,7 +105,7 @@ public class TradeController {
         log.info("Subscription {} {}", subscriptionId, subscription != null ? "closed" : " not found");
     }
 
-    public static Pageable getPagebleRequest(Optional<Integer> page, Optional<Integer> size, Sort sort) {
+    private static Pageable getPagebleRequest(Optional<Integer> page, Optional<Integer> size, Sort sort) {
         if (page.isPresent() || size.isPresent()) {
             return PageRequest.of(page.orElse(0), size.orElse(100), sort);
         } else {
@@ -110,7 +113,29 @@ public class TradeController {
         }
     }
 
-    public static Sort parseSort(Optional<List<String>> sortSettings) {
+    private static Predicate<Trade> parseOptionFilter(String filterStr) {
+        if (filterStr.trim().isEmpty()) {
+            return ACCEPT_ALL;
+        }
+        log.info("Parsing option filters [{}]", filterStr);
+        List<Predicate<Trade>> filters = Arrays.stream(filterStr.split(";")).map(filter -> {
+            log.info("Parsing filter {}", filter);
+            String[] parts = filter.split("=");
+            String field = parts[0];
+            Set<String> values = new HashSet<>(Arrays.asList(parts[1].split(",")));
+            if (!values.isEmpty()) {
+                if ("client".equals(field))
+                    return getTradePredicate(TRADE_CLIENT_MAPPER, values);
+                else if ("status".equals(field)) {
+                    return getTradePredicate(TRADE_STATUS_MAPPER, values);
+                }
+            }
+            throw new IllegalArgumentException("Invalid format: " + filter);
+        }).collect(Collectors.toList());
+        return filters.size() == 1 ? filters.get(0) : new MultiPredicate<>(filters);
+    }
+
+    private static Sort parseSort(Optional<List<String>> sortSettings) {
         log.info("Parse sort {}", sortSettings);
         return sortSettings.map(sorting -> {
             List<Sort.Order> orders = sorting.stream()

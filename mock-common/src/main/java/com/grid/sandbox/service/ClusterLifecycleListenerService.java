@@ -1,6 +1,5 @@
 package com.grid.sandbox.service;
 
-import com.grid.sandbox.model.ClusterStateChangeEvent;
 import com.hazelcast.cluster.MembershipEvent;
 import com.hazelcast.cluster.MembershipListener;
 import com.hazelcast.core.LifecycleEvent;

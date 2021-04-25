@@ -60,8 +60,9 @@
                 const page = document.getElementById('pageNumber').value;
                 const size = document.getElementById('pageSize').value;
                 const sort = document.getElementById('sort').value;
+                const filter = document.getElementById('userFilter').value;
 
-                const params = {subscriptionId, page, size, sort};
+                const params = {subscriptionId, page, size, sort, filter};
                 for(const name in params) {
                     formData.append(name, params[name]);
                 }

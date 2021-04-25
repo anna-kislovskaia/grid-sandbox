@@ -1,4 +1,4 @@
-package com.grid.sandbox.model;
+package com.grid.sandbox.service;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

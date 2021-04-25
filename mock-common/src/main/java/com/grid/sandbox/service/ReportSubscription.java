@@ -1,4 +1,4 @@
-package com.grid.sandbox.model;
+package com.grid.sandbox.service;
 
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
