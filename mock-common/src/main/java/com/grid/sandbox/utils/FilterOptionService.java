@@ -39,7 +39,8 @@ public class FilterOptionService<K, V> {
                             .collect(Collectors.toMap(FilterOptionUpdateEntry::getName, entry -> entry));
                     lastOptions.set(updatedOptions);
                     return options;
-                });
+                })
+                .distinctUntilChanged();
     }
 
     private boolean filterOptionsMightChange(UpdateEvent<K, V> event) {

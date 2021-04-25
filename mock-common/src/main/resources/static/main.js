@@ -4,6 +4,8 @@
                 if (eventStream) {
                     eventStream.close();
                 }
+                const subscriptionId = document.getElementById('subscriptionId');
+                subscriptionId.innerText='';
             }
 
             function resetEventStream() {
@@ -31,6 +33,13 @@
                     const contentElement = document.createElement("div");
 
                     const data = JSON.parse(message.data);
+                    if (data.snapshot) {
+                        const subscriptionId = document.getElementById('subscriptionId');
+                        subscriptionId.innerText = data.subscriptionId;
+                    }
+                    const filters = document.getElementById('filters');
+                    filters.innerText = JSON.stringify(data.filterOptions);
+
                     let content = `<h2>${data.snapshot ? "Snapshot" : "Update"}</h2>`;
                     content += '<ol class="list-group">';
                     data.updated.map(row => {
@@ -43,6 +52,25 @@
                     contentElement.innerHTML = content;
                     dataContainer.insertBefore(contentElement, dataContainer.firstChild);
                 };
+            }
+
+            function updateSubscriptionParams() {
+                const formData  = new FormData();
+                const subscriptionId = document.getElementById('subscriptionId').innerText;
+                const page = document.getElementById('pageNumber').value;
+                const size = document.getElementById('pageSize').value;
+                const sort = document.getElementById('sort').value;
+
+                const params = {subscriptionId, page, size, sort};
+                for(const name in params) {
+                    formData.append(name, params[name]);
+                }
+                console.log(`Update subscription parameters to ${JSON.stringify(params)}`);
+                fetch('/trades/params', {
+                    method: 'PUT',
+                    body: formData,
+                    credentials: 'same-origin'
+                })
             }
 
             console.log("Loading");

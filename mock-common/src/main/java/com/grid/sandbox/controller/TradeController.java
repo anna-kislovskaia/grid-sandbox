@@ -12,8 +12,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -49,7 +51,10 @@ public class TradeController {
     {
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
         ReportSubscription<Trade> subscription = createSubscription(request);
-        return Flux.from(tradeReportService.getTrades(subscription, ACCEPT_OPENED));
+        return Flux.from(
+                tradeReportService.getTrades(subscription, ACCEPT_OPENED)
+                    .doOnTerminate(() -> closeSubscription(subscription.getSubscriptionId()))
+        );
     }
 
 
@@ -60,22 +65,26 @@ public class TradeController {
     {
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
         ReportSubscription<Trade> subscription = createSubscription(request);
-        return Flux.from(tradeReportService.getTrades(subscription, ACCEPT_ALL));
+        return Flux.from(
+                tradeReportService.getTrades(subscription, ACCEPT_ALL)
+                        .doOnTerminate(() -> closeSubscription(subscription.getSubscriptionId()))
+        );
     }
 
-    @GetMapping(path = "/params", produces = MediaType.TEXT_PLAIN_VALUE)
-    public void updateSubscription(@RequestParam int subscriptionId,
-                                  @RequestParam Optional<Integer> page,
-                                  @RequestParam Optional<Integer> size,
-                                  @RequestParam Optional<List<String>> sort) {
+    @PutMapping(path = "/params")
+    public ResponseEntity updateSubscription(@RequestParam int subscriptionId,
+                                             @RequestParam Optional<Integer> page,
+                                             @RequestParam Optional<Integer> size,
+                                             @RequestParam Optional<List<String>> sort) {
 
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
         ReportSubscription<Trade> subscription = subscriptions.get(subscriptionId);
         if (subscription != null) {
             subscription.getPageableSubject().onNext(request);
         } else {
-            throw new IllegalArgumentException("Subscription " + subscriptionId + " not found");
+            return ResponseEntity.notFound().build();
         }
+        return ResponseEntity.ok().build();
     }
 
     private ReportSubscription<Trade> createSubscription(Pageable request) {
@@ -86,6 +95,11 @@ public class TradeController {
                 getSessionScheduler());
         subscriptions.put(subscription.getSubscriptionId(), subscription);
         return subscription;
+    }
+
+    private void closeSubscription(int subscriptionId) {
+        ReportSubscription<Trade> subscription = subscriptions.remove(subscriptionId);
+        log.info("Subscription {} {}", subscriptionId, subscription != null ? "closed" : " not found");
     }
 
     public static Pageable getPagebleRequest(Optional<Integer> page, Optional<Integer> size, Sort sort) {

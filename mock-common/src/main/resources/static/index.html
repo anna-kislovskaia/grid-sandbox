@@ -17,13 +17,19 @@
 <body>
 <div class="container">
     <div class="row">
-        <div class="col-12">
+        <div class="col-6">
             <div class="form-group">
                 <label for="reportType">Report Type</label>
                 <select class="form-control" id="reportType">
                     <option value="open" selected>Open</option>
                     <option value="all">All</option>
                 </select>
+            </div>
+        </div>
+        <div class="col-6">
+            <div class="form-group">
+                <label for="subscriptionId">Subscription Id</label>
+                <p class="form-control" id="subscriptionId"></p>
             </div>
         </div>
     </div>
@@ -50,9 +56,18 @@
         </div>
     </div>
     <div class="row">
-        <div class="col-6">
+        <div class="col-12">
             <button class="btn btn-primary" onclick="resetEventStream()">Subscribe</button>
+            <button class="btn btn-primary" onclick="updateSubscriptionParams()">Update subscription params</button>
             <button class="btn btn-primary" onclick="stopEventStream()">Stop Updates</button>
+            <button class="btn btn-secondary" data-toggle="collapse" data-target="#filtersContainer">
+                Show filters
+            </button>
+        </div>
+    </div>
+    <div id="filtersContainer" class="collapse row" >
+        <div id="filters" class="col-12">
+
         </div>
     </div>
     <div class="row">
