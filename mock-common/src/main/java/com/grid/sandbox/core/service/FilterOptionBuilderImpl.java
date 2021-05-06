@@ -1,5 +1,6 @@
-package com.grid.sandbox.core.model;
+package com.grid.sandbox.core.service;
 
+import com.grid.sandbox.core.model.FilterOptionUpdateEntry;
 import lombok.AllArgsConstructor;
 
 import java.util.*;

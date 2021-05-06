@@ -1,5 +1,6 @@
 package com.grid.sandbox.model;
 
+import com.grid.sandbox.core.model.BlotterReportRecord;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -12,11 +13,21 @@ import java.math.BigDecimal;
 @ToString
 @Getter
 @Builder(toBuilder = true, builderClassName = "Builder")
-public class Trade implements Serializable {
+public class Trade implements Serializable, BlotterReportRecord<String> {
     private String tradeId;
     private BigDecimal balance;
     private String client;
     private long lastUpdateTimestamp;
     private TradeStatus status;
+
+    @Override
+    public String getRecordKey() {
+        return tradeId;
+    }
+
+    @Override
+    public long getRecordVersion() {
+        return lastUpdateTimestamp;
+    }
 }
 

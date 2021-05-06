@@ -19,7 +19,7 @@ public class TestHelpers {
     public static final Comparator<Trade> ID_COMPARATOR = Comparator.comparing(Trade::getTradeId);
     public static Trade setStatus(Trade trade, TradeStatus status) { return trade.toBuilder().status(status).build();};
     public static UpdateEventEntry<String, Trade> createEventEntry(Trade trade, Trade old) {
-        return new UpdateEventEntry(trade.getTradeId(), trade, old);
+        return new UpdateEventEntry<>(trade, old);
     }
 
     public static List<Trade> generateTrades() {

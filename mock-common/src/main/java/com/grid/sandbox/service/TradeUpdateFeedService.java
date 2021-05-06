@@ -46,7 +46,7 @@ public class TradeUpdateFeedService extends EntryAdapter<String, Trade> {
                 eventQueue.drainTo(updates);
                 List<UpdateEventEntry<String, Trade>> events = updates.stream()
                         .map(updateEvent ->
-                            new UpdateEventEntry<>(updateEvent.getKey(), updateEvent.getValue(), updateEvent.getOldValue()))
+                            new UpdateEventEntry<>(updateEvent.getValue(), updateEvent.getOldValue()))
                         .collect(Collectors.toList());
                 UpdateEvent<String, Trade> updateEvent = new UpdateEvent<>(events, UpdateEvent.Type.INCREMENTAL);
                 log.info("Event update published: {}", updateEvent);

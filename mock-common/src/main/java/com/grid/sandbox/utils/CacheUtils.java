@@ -1,7 +1,7 @@
 package com.grid.sandbox.utils;
 
-import com.grid.sandbox.core.model.FilterOptionBuilder;
-import com.grid.sandbox.core.model.FilterOptionBuilderImpl;
+import com.grid.sandbox.core.service.FilterOptionBuilder;
+import com.grid.sandbox.core.service.FilterOptionBuilderImpl;
 import com.grid.sandbox.model.Trade;
 
 import java.util.Comparator;

@@ -1,9 +1,6 @@
 package com.grid.sandbox.core.service;
 
-import com.grid.sandbox.core.model.FilterOptionBuilder;
-import com.grid.sandbox.core.model.FilterOptionUpdateEntry;
-import com.grid.sandbox.core.model.UpdateEvent;
-import com.grid.sandbox.core.model.UpdateEventEntry;
+import com.grid.sandbox.core.model.*;
 import io.reactivex.Flowable;
 import io.reactivex.Scheduler;
 import lombok.AllArgsConstructor;
@@ -18,7 +15,7 @@ import java.util.stream.Stream;
 
 @AllArgsConstructor
 @Log4j2
-public class FilterOptionService<K, V> {
+public class FilterOptionService<K, V extends BlotterReportRecord<K>> {
     private Flowable<UpdateEvent<K, V>> feed;
     private FilterOptionBuilder<V> filterBuilder;
     private Predicate<V> filter;

@@ -1,7 +1,7 @@
 package com.grid.sandbox.service;
 
 import com.grid.sandbox.core.model.PageUpdate;
-import com.grid.sandbox.core.model.ReportSubscription;
+import com.grid.sandbox.core.utils.ReportSubscription;
 import com.grid.sandbox.core.service.BlotterReportService;
 import com.grid.sandbox.core.service.FilterOptionService;
 import com.grid.sandbox.core.utils.MultiComparator;
@@ -19,8 +19,6 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.function.Predicate;
 
-import static com.grid.sandbox.utils.CacheUtils.TRADE_KEY_MAPPER;
-
 @Service
 @Log4j2
 public class TradeReportService {
@@ -36,7 +34,8 @@ public class TradeReportService {
         FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
                 tradeFeedService.getTradeFeed(), CacheUtils.getTradeFilterOptionBuilder(), reportFilter, subscription.getScheduler());
         BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(
-                tradeFeedService.getTradeFeed(), TRADE_KEY_MAPPER, subscription.getScheduler());
+                tradeFeedService.getTradeFeed(), subscription.getScheduler()
+        );
 
         Flowable<Predicate<Trade>> compositeFilterFeed = subscription.getUserFilterFeed().map(userFilter ->
                 userFilter == null ? reportFilter : new MultiPredicate<>(Arrays.asList(reportFilter, userFilter))

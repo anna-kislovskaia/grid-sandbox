@@ -83,20 +83,20 @@ public class TradeFeedService {
         List<UpdateEventEntry<String, Trade>> updates = event.getUpdates();
         for (ListIterator<UpdateEventEntry<String, Trade>> iterator = updates.listIterator(); iterator.hasNext();) {
             UpdateEventEntry<String, Trade> entry = iterator.next();
-            Trade old = allTrades.get(entry.getKey());
+            Trade old = allTrades.get(entry.getRecordKey());
             Trade updatedTrade = entry.getValue();
             if (updatedTrade != null) {
                 if (old == null || old.getLastUpdateTimestamp() <= updatedTrade.getLastUpdateTimestamp()) {
                     log.info("Snapshot update {} \n old: {}", updatedTrade, old);
-                    allTrades.put(entry.getKey(), updatedTrade);
-                    iterator.set(updateEvent(entry, old, updatedTrade));
+                    allTrades.put(entry.getRecordKey(), updatedTrade);
+                    iterator.set(updateEvent(old, updatedTrade));
                 } else {
                     log.info("Stale update {}", updatedTrade);
                     iterator.remove();
                 }
             } else {
-                log.info("Trade deleted {}: {}", entry.getKey(), old);
-                allTrades.remove(entry.getKey());
+                log.info("Trade deleted {}: {}", entry.getRecordKey(), old);
+                allTrades.remove(entry.getRecordKey());
             }
         }
     }
@@ -117,11 +117,11 @@ public class TradeFeedService {
         });
     }
 
-    private static UpdateEventEntry<String, Trade> updateEvent(UpdateEventEntry<String, Trade> event, Trade old, Trade updated) {
-        return new UpdateEventEntry<>(event.getKey(), updated, old);
+    private static UpdateEventEntry<String, Trade> updateEvent(Trade old, Trade updated) {
+        return new UpdateEventEntry<>(updated, old);
     }
 
     private static UpdateEventEntry<String, Trade> createAddEvent(Trade updated) {
-        return new UpdateEventEntry<>(updated.getTradeId(), updated, null);
+        return new UpdateEventEntry<>(updated, null);
     }
 }

@@ -1,6 +1,5 @@
 package com.grid.sandbox.core.service;
 
-import com.grid.sandbox.core.model.FilterOptionBuilder;
 import com.grid.sandbox.core.model.FilterOptionUpdateEntry;
 import com.grid.sandbox.core.model.UpdateEvent;
 import com.grid.sandbox.core.model.UpdateEventEntry;

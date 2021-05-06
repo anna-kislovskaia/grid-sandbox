@@ -52,7 +52,7 @@ class BlotterPagableReportServiceTest {
                 new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT)
         );
         BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(
-                feed, TRADE_KEY_MAPPER, SAME_THREAD_SCHEDULER);
+                feed, SAME_THREAD_SCHEDULER);
         blotterReportService.getReport(request, ACCEPT_ALL, ID_COMPARATOR).subscribe(consumer);
 
 
@@ -76,7 +76,7 @@ class BlotterPagableReportServiceTest {
                 Comparator.comparing(Trade::getBalance),
                 ID_COMPARATOR);
         BlotterReportService<String, Trade> blotterReportService =
-                new BlotterReportService<>(feed, TRADE_KEY_MAPPER, SAME_THREAD_SCHEDULER);
+                new BlotterReportService<>(feed, SAME_THREAD_SCHEDULER);
         blotterReportService.getReport(request, ACCEPT_ALL, comparator).subscribe(consumer);
 
 
@@ -105,7 +105,7 @@ class BlotterPagableReportServiceTest {
                 Comparator.comparing(Trade::getBalance),
                 ID_COMPARATOR);
         BlotterReportService<String, Trade> blotterReportService =
-                new BlotterReportService<>(feed, TRADE_KEY_MAPPER, SAME_THREAD_SCHEDULER);
+                new BlotterReportService<>(feed, SAME_THREAD_SCHEDULER);
         blotterReportService.getReport(request, ACCEPT_ALL, comparator).subscribe(consumer);
 
         verify(consumer, times(2)).accept(pageUpdateCaptor.capture());
@@ -142,7 +142,7 @@ class BlotterPagableReportServiceTest {
                 Comparator.comparing(Trade::getBalance),
                 ID_COMPARATOR);
         BlotterReportService<String, Trade> blotterReportService =
-                new BlotterReportService<>(feed, TRADE_KEY_MAPPER, SAME_THREAD_SCHEDULER);
+                new BlotterReportService<>(feed, SAME_THREAD_SCHEDULER);
         blotterReportService.getReport(request, ACCEPT_OPENED, comparator).subscribe(consumer);
 
         verify(consumer, times(2)).accept(pageUpdateCaptor.capture());

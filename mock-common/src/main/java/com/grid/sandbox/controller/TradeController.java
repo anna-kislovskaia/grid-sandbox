@@ -3,7 +3,7 @@ package com.grid.sandbox.controller;
 import com.grid.sandbox.core.model.PageUpdate;
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.core.service.KeyOrderedSchedulerService;
-import com.grid.sandbox.core.model.ReportSubscription;
+import com.grid.sandbox.core.utils.ReportSubscription;
 import com.grid.sandbox.service.TradeReportService;
 import com.grid.sandbox.core.utils.MultiPredicate;
 import io.reactivex.Scheduler;

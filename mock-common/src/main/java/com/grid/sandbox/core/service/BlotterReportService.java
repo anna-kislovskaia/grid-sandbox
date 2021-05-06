@@ -1,5 +1,6 @@
 package com.grid.sandbox.core.service;
 
+import com.grid.sandbox.core.model.BlotterReportRecord;
 import com.grid.sandbox.core.model.PageUpdate;
 import com.grid.sandbox.core.model.UpdateEvent;
 import com.grid.sandbox.core.model.UpdateEventEntry;
@@ -12,16 +13,14 @@ import org.springframework.data.domain.Pageable;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @Log4j2
 @AllArgsConstructor
-public class BlotterReportService<K, V> {
+public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
 
     private Flowable<UpdateEvent<K, V>> feed;
-    private Function<V, K> keyMapper;
     private Scheduler scheduler;
 
     public Flowable<PageUpdate<V>> getReport(Pageable request, Predicate<V> filter, Comparator<V> comparator) {
@@ -68,7 +67,7 @@ public class BlotterReportService<K, V> {
         Iterable<V> pageContent = sortedValues.keys(min, max);
         Map<K, V> current = new LinkedHashMap<>();
         for (V existing : pageContent) {
-            current.put(keyMapper.apply(existing), existing);
+            current.put(existing.getRecordKey(), existing);
         }
 
         Map<K, V> old = page.getAndSet(current);
@@ -79,7 +78,7 @@ public class BlotterReportService<K, V> {
         } else {
             List<V> updated = current.values().stream()
                     .filter(value -> {
-                        K key = keyMapper.apply(value);
+                        K key = value.getRecordKey();
                         return !old.containsKey(key) || changed.containsKey(key);
                     })
                     .collect(Collectors.toList());
@@ -128,7 +127,7 @@ public class BlotterReportService<K, V> {
             }
             if ((valueDeleted || valueUpdated) && !snapshot) {
                 V changed = valueUpdated ? value : event.getOldValue();
-                updated.put(keyMapper.apply(value), changed);
+                updated.put(changed.getRecordKey(), changed);
             }
         }
         log.info("Processed");

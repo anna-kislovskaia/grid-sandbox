@@ -10,7 +10,7 @@ import java.util.StringJoiner;
 @Data
 @AllArgsConstructor
 @Getter
-public class UpdateEvent<K, V> {
+public class UpdateEvent<K, V extends BlotterReportRecord<K>> {
     public enum Type {
         SNAPSHOT, INCREMENTAL
     }
