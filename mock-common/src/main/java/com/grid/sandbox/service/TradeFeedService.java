@@ -1,8 +1,8 @@
 package com.grid.sandbox.service;
 
 import com.grid.sandbox.model.Trade;
-import com.grid.sandbox.model.UpdateEvent;
-import com.grid.sandbox.model.UpdateEventEntry;
+import com.grid.sandbox.core.model.UpdateEvent;
+import com.grid.sandbox.core.model.UpdateEventEntry;
 import com.hazelcast.replicatedmap.ReplicatedMap;
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;

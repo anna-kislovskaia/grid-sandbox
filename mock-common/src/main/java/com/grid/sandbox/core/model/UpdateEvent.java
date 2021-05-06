@@ -1,11 +1,9 @@
-package com.grid.sandbox.model;
+package com.grid.sandbox.core.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 
-import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.StringJoiner;
 
@@ -14,7 +12,7 @@ import java.util.StringJoiner;
 @Getter
 public class UpdateEvent<K, V> {
     public enum Type {
-        SNAPSHOT, INCREMENTAL, INITIAL
+        SNAPSHOT, INCREMENTAL
     }
 
     private final List<UpdateEventEntry<K, V>> updates;
@@ -35,5 +33,4 @@ public class UpdateEvent<K, V> {
         return "UpdateEvent{" + type + ":" + updates.size() + "}";
     }
 
-    public static UpdateEvent inital = new UpdateEvent(Collections.emptyList(), Type.INITIAL);
 }

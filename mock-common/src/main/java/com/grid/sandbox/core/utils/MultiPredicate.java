@@ -1,4 +1,4 @@
-package com.grid.sandbox.utils;
+package com.grid.sandbox.core.utils;
 
 import lombok.AllArgsConstructor;
 

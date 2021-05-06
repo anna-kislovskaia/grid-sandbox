@@ -1,9 +1,9 @@
-package com.grid.sandbox.utils;
+package com.grid.sandbox.core.service;
 
-import com.grid.sandbox.model.FilterOptionBuilder;
-import com.grid.sandbox.model.FilterOptionUpdateEntry;
-import com.grid.sandbox.model.UpdateEvent;
-import com.grid.sandbox.model.UpdateEventEntry;
+import com.grid.sandbox.core.model.FilterOptionBuilder;
+import com.grid.sandbox.core.model.FilterOptionUpdateEntry;
+import com.grid.sandbox.core.model.UpdateEvent;
+import com.grid.sandbox.core.model.UpdateEventEntry;
 import io.reactivex.Flowable;
 import io.reactivex.Scheduler;
 import lombok.AllArgsConstructor;

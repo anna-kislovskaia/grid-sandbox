@@ -1,4 +1,4 @@
-package com.grid.sandbox.model;
+package com.grid.sandbox.core.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;

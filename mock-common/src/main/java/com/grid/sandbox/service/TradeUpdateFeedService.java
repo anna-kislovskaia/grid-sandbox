@@ -1,8 +1,8 @@
 package com.grid.sandbox.service;
 
 import com.grid.sandbox.model.Trade;
-import com.grid.sandbox.model.UpdateEvent;
-import com.grid.sandbox.model.UpdateEventEntry;
+import com.grid.sandbox.core.model.UpdateEvent;
+import com.grid.sandbox.core.model.UpdateEventEntry;
 import com.hazelcast.core.EntryAdapter;
 import com.hazelcast.core.EntryEvent;
 import io.reactivex.BackpressureStrategy;
@@ -12,9 +12,7 @@ import lombok.extern.log4j.Log4j2;
 
 import javax.annotation.PostConstruct;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;

@@ -1,4 +1,4 @@
-package com.grid.sandbox.service;
+package com.grid.sandbox.core.service;
 
 import io.reactivex.Scheduler;
 import io.reactivex.schedulers.Schedulers;

@@ -2,7 +2,7 @@ package com.grid.sandbox.utils;
 
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.model.TradeStatus;
-import com.grid.sandbox.model.UpdateEventEntry;
+import com.grid.sandbox.core.model.UpdateEventEntry;
 import io.reactivex.Scheduler;
 import io.reactivex.schedulers.Schedulers;
 
@@ -11,19 +11,18 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Executor;
-import java.util.function.Predicate;
 
 public class TestHelpers {
 
-    static final Executor SAME_THREAD_EXECUTOR = Runnable::run;
-    static final Scheduler SAME_THREAD_SCHEDULER = Schedulers.from(SAME_THREAD_EXECUTOR);
-    static final Comparator<Trade> ID_COMPARATOR = Comparator.comparing(Trade::getTradeId);
-    static Trade setStatus(Trade trade, TradeStatus status) { return trade.toBuilder().status(status).build();};
-    static UpdateEventEntry<String, Trade> createEventEntry(Trade trade, Trade old) {
+    public static final Executor SAME_THREAD_EXECUTOR = Runnable::run;
+    public static final Scheduler SAME_THREAD_SCHEDULER = Schedulers.from(SAME_THREAD_EXECUTOR);
+    public static final Comparator<Trade> ID_COMPARATOR = Comparator.comparing(Trade::getTradeId);
+    public static Trade setStatus(Trade trade, TradeStatus status) { return trade.toBuilder().status(status).build();};
+    public static UpdateEventEntry<String, Trade> createEventEntry(Trade trade, Trade old) {
         return new UpdateEventEntry(trade.getTradeId(), trade, old);
     }
 
-    static List<Trade> generateTrades() {
+    public static List<Trade> generateTrades() {
         ArrayList<Trade> testTrades = new ArrayList<>();
 
         testTrades.add(new Trade("1",  BigDecimal.valueOf(500), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));

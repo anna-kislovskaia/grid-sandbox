@@ -1,4 +1,4 @@
-package com.grid.sandbox.model;
+package com.grid.sandbox.core.model;
 
 import java.util.List;
 import java.util.stream.Stream;
