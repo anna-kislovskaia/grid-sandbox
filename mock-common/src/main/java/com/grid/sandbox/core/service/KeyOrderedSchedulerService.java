@@ -19,7 +19,7 @@ public class KeyOrderedSchedulerService {
     @PostConstruct
     private void init() {
         threadCount = Runtime.getRuntime().availableProcessors();
-        log.info("Key ordered scheduler factory is initialized as to {} thread pool", threadCount);
+        log.info("Key ordered scheduler factory is initialized as {} thread pool", threadCount);
     }
 
     public Scheduler getScheduler(String key) {

@@ -56,7 +56,8 @@
         </div>
         <div class="col-12">
             <div class="form-group">
-                <label for="userFilter">User filters</label>
+                <label for="userFilter">User filters</label><br/>
+                <label id="filters"></label>
                 <input type="text" class="form-control" id="userFilter">
             </div>
         </div>
@@ -66,14 +67,6 @@
             <button class="btn btn-primary" onclick="resetEventStream()">Subscribe</button>
             <button class="btn btn-primary" onclick="updateSubscriptionParams()">Update subscription params</button>
             <button class="btn btn-primary" onclick="stopEventStream()">Stop Updates</button>
-            <button class="btn btn-secondary" data-toggle="collapse" data-target="#filtersContainer">
-                Show filters
-            </button>
-        </div>
-    </div>
-    <div id="filtersContainer" class="collapse row" >
-        <div id="filters" class="col-12">
-
         </div>
     </div>
     <div class="row">

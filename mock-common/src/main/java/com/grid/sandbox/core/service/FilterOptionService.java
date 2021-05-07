@@ -35,6 +35,7 @@ public class FilterOptionService<K, V extends BlotterReportRecord<K>> {
                     Map<String, FilterOptionUpdateEntry> updatedOptions = options.stream()
                             .collect(Collectors.toMap(FilterOptionUpdateEntry::getName, entry -> entry));
                     lastOptions.set(updatedOptions);
+                    log.info("Recalculate filter options done");
                     return options;
                 })
                 .distinctUntilChanged();

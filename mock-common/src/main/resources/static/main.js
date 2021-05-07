@@ -6,6 +6,9 @@
                 }
                 const subscriptionId = document.getElementById('subscriptionId');
                 subscriptionId.innerText='';
+                // cleanup user filters
+                document.getElementById('filters').innerText = '';
+                document.getElementById('userFilter').value = '';
             }
 
             function resetEventStream() {

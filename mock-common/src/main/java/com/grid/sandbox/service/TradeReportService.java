@@ -31,10 +31,11 @@ public class TradeReportService {
 
 
     public Flowable<PageUpdate<Trade>> getTrades(ReportSubscription<Trade> subscription, Predicate<Trade> reportFilter) {
+        String feedId = "tradeFeed-" + subscription.getSubscriptionId();
         FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
-                tradeFeedService.getTradeFeed(), CacheUtils.getTradeFilterOptionBuilder(), reportFilter, subscription.getScheduler());
+                tradeFeedService.getTradeFeed(feedId), CacheUtils.getTradeFilterOptionBuilder(), reportFilter, subscription.getScheduler());
         BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(
-                tradeFeedService.getTradeFeed(), subscription.getScheduler()
+                tradeFeedService.getTradeFeed(feedId), subscription.getScheduler()
         );
 
         Flowable<Predicate<Trade>> compositeFilterFeed = subscription.getUserFilterFeed().map(userFilter ->

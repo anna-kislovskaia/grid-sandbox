@@ -29,6 +29,14 @@ public class UpdateEvent<K, V extends BlotterReportRecord<K>> {
         }
     }
 
+    public boolean isSnapshot() {
+        return type == Type.SNAPSHOT;
+    }
+
+    public boolean isEmpty() {
+        return type == Type.INCREMENTAL && updates.isEmpty();
+    }
+
     public String toShortString() {
         return "UpdateEvent{" + type + ":" + updates.size() + "}";
     }
