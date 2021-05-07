@@ -64,8 +64,11 @@ public class TradeFeedService {
                 });
     }
 
-    public Flowable<UpdateEvent<String, Trade>> getTradeFeed(String subscriptionName) {
-        return feedService.getFeed(subscriptionName);
+    public Flowable<UpdateEvent<String, Trade>> getTradeFeed() {
+        return feedService.getFeed();
     }
 
+    public Flowable<UpdateEvent<String, Trade>> getTradeSnapshotFeed() {
+        return feedService.getSnapshotFeed();
+    }
 }

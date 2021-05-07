@@ -5,7 +5,6 @@ import com.grid.sandbox.core.model.UpdateEvent;
 import com.grid.sandbox.core.model.UpdateEventEntry;
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
-import io.reactivex.disposables.Disposable;
 import io.reactivex.subjects.BehaviorSubject;
 import io.reactivex.subjects.PublishSubject;
 import io.reactivex.subjects.Subject;
@@ -13,15 +12,19 @@ import lombok.extern.log4j.Log4j2;
 
 import javax.annotation.PostConstruct;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @Log4j2
 public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
     private final Subject<ConcurrentMap<K, V>> snapshotPublisher = BehaviorSubject.create();
     private final Flowable<ConcurrentMap<K, V>> snapshotFlowable = snapshotPublisher.toFlowable(BackpressureStrategy.LATEST);
+    private final Flowable<UpdateEvent<K, V>> snapshotEventFlowable = snapshotFlowable.map(snapshot -> {
+        List<UpdateEventEntry<K, V>> eventSnapshot = snapshot.values().stream()
+                .map(UpdateEventEntry::addedValue)
+                .collect(Collectors.toList());
+        return new UpdateEvent<>(eventSnapshot, UpdateEvent.Type.SNAPSHOT);
+    });
     private final Subject<Collection<V>> updatePublisher = PublishSubject.create();
     private final Flowable<Collection<V>> updateFlowable = updatePublisher.toFlowable(BackpressureStrategy.MISSING);
 
@@ -72,13 +75,13 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
             V old = current.get(key);
             long oldVersion = old == null ? 0 : old.getRecordVersion();
             if (oldVersion < value.getRecordVersion()) {
-                log.info("Snapshot update {}: {} -> {}", key, oldVersion, value.getRecordVersion());
+                log.info("Apply record update {}: {} -> {}", key, oldVersion, value.getRecordVersion());
                 current.put(key, value);
                 if (!previous.containsKey(key)) {
                     previous.put(key, old);
                 }
            } else {
-                log.debug("Stale update {}", value);
+                log.debug("Stale record {}", value);
             }
         }
         List<UpdateEventEntry<K, V>> recordUpdates = current.keySet().stream()
@@ -88,60 +91,12 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
         return new UpdateEvent<>(recordUpdates, UpdateEvent.Type.INCREMENTAL);
     }
 
-    public Flowable<UpdateEvent<K, V>> getFeed(final String identifier) {
-        log.info("{} Subscription requested", identifier);
-        return snapshotFlowable.switchMap(snapshot -> {
-            // subscribe and buffer updates while creating the snapshot
-            Flowable<UpdateEvent<K, V>> updates = updateEventFlowable
-                    .onBackpressureBuffer(updateEventBufferSize)
-                    .share();
-            Disposable disposable = updates.subscribe();
-            // create snapshot event
-            List<UpdateEventEntry<K, V>> eventSnapshot = snapshot.values().stream()
-                    .map(UpdateEventEntry::addedValue)
-                    .collect(Collectors.toList());
-            Flowable<UpdateEvent<K, V>> snapshotEvent = Flowable.just(
-                    new UpdateEvent<>(eventSnapshot, UpdateEvent.Type.SNAPSHOT)
-            );
-
-            AtomicBoolean afterSnapshot = new AtomicBoolean();
-            Map<K, V> bufferedUpdates = new ConcurrentHashMap<>();
-            log.info("{} Snapshot retrieved", identifier);
-            return updates.mergeWith(snapshotEvent).map(event -> {
-                if (afterSnapshot.compareAndSet(false, event.isSnapshot())) {
-                    return applyBufferedUpdates(event, bufferedUpdates);
-                } else {
-                    if (afterSnapshot.get()) {
-                        return event;
-                    } else {
-                        // buffer until snapshot
-                        event.getUpdates().forEach(entry -> bufferedUpdates.put(entry.getRecordKey(), entry.getValue()));
-                        log.info("{} Buffer update: {}", identifier, event.toShortString());
-                        return new UpdateEvent<K, V>(Collections.emptyList(), UpdateEvent.Type.INCREMENTAL);
-                    }
-                }
-            }).doOnTerminate(() -> {
-                log.info("{} Subscription cancelled", identifier);
-                disposable.dispose();
-            });
-        }).filter(event -> !event.isEmpty());
+    public Flowable<UpdateEvent<K, V>> getSnapshotFeed() {
+        return snapshotEventFlowable;
     }
 
-    private UpdateEvent<K, V> applyBufferedUpdates(UpdateEvent<K, V> event, Map<K, V> bufferedUpdates) {
-        if (bufferedUpdates.isEmpty()) {
-            return event;
-        }
-        log.info("Apply buffered updates");
-        ListIterator<UpdateEventEntry<K, V>> iterator = event.getUpdates().listIterator();
-        while (iterator.hasNext()) {
-            UpdateEventEntry<K, V> entry = iterator.next();
-            V value = bufferedUpdates.get(entry.getRecordKey());
-            if (value != null && value.getRecordVersion() > entry.getValue().getRecordVersion()) {
-                log.info("Apply buffered update {}: {} -> {}", entry.getRecordKey(), entry.getValue().getRecordVersion(), value.getRecordVersion());
-                iterator.set(UpdateEventEntry.addedValue(value));
-            }
-        }
-        return event;
-    }
 
+    public Flowable<UpdateEvent<K, V>> getFeed() {
+        return Flowable.merge(snapshotEventFlowable, updateEventFlowable);
+    }
 }

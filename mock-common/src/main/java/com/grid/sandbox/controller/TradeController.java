@@ -6,8 +6,10 @@ import com.grid.sandbox.core.service.KeyOrderedSchedulerService;
 import com.grid.sandbox.core.utils.ReportSubscription;
 import com.grid.sandbox.service.TradeReportService;
 import com.grid.sandbox.core.utils.MultiPredicate;
+import io.reactivex.Flowable;
 import io.reactivex.Scheduler;
 import lombok.extern.log4j.Log4j2;
+import org.reactivestreams.Subscription;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -51,10 +53,7 @@ public class TradeController {
     {
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
         ReportSubscription<Trade> subscription = createSubscription(request);
-        return Flux.from(
-                tradeReportService.getTrades(subscription, ACCEPT_OPENED)
-                    .doAfterTerminate(() -> closeSubscription(subscription.getSubscriptionId()))
-        );
+        return toFlux(tradeReportService.getTrades(subscription, ACCEPT_OPENED), subscription);
     }
 
 
@@ -65,10 +64,18 @@ public class TradeController {
     {
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
         ReportSubscription<Trade> subscription = createSubscription(request);
-        return Flux.from(
-                tradeReportService.getTrades(subscription, ACCEPT_ALL)
-                        .doAfterTerminate(() -> closeSubscription(subscription.getSubscriptionId()))
-        );
+        return toFlux(tradeReportService.getTrades(subscription, ACCEPT_ALL), subscription);
+    }
+
+    private <T> Flux<T> toFlux(Flowable<T> feed, ReportSubscription<?> subscription) {
+        Subscription[] subscriptionHandler = new Subscription[1];
+        Flowable<T> cancellableFeed = feed.doOnSubscribe(feedSubscription -> subscriptionHandler[0] = feedSubscription);
+        return Flux.from(cancellableFeed)
+                .doOnCancel(() -> {
+                    // flux does not stop underlying stream
+                    subscriptionHandler[0].cancel();
+                    closeSubscription(subscription.getSubscriptionId());
+                });
     }
 
     @PutMapping(path = "/params")

@@ -1,6 +1,7 @@
 package com.grid.sandbox.service;
 
 import com.grid.sandbox.core.model.PageUpdate;
+import com.grid.sandbox.core.model.UpdateEvent;
 import com.grid.sandbox.core.utils.ReportSubscription;
 import com.grid.sandbox.core.service.BlotterReportService;
 import com.grid.sandbox.core.service.FilterOptionService;
@@ -9,6 +10,7 @@ import com.grid.sandbox.core.utils.MultiPredicate;
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.utils.*;
 import io.reactivex.Flowable;
+import io.reactivex.Scheduler;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,11 +34,13 @@ public class TradeReportService {
 
     public Flowable<PageUpdate<Trade>> getTrades(ReportSubscription<Trade> subscription, Predicate<Trade> reportFilter) {
         String feedId = "tradeFeed-" + subscription.getSubscriptionId();
+        log.info("{} Subscription requested", feedId);
+        Flowable<UpdateEvent<String, Trade>> tradeFeed = tradeFeedService.getTradeFeed()
+                .doOnCancel(() -> log.info("{} Subscription cancelled", feedId));
+        Scheduler scheduler = subscription.getScheduler();
         FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
-                tradeFeedService.getTradeFeed(feedId), CacheUtils.getTradeFilterOptionBuilder(), reportFilter, subscription.getScheduler());
-        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(
-                tradeFeedService.getTradeFeed(feedId), subscription.getScheduler()
-        );
+                tradeFeed, tradeFeedService.getTradeSnapshotFeed(), CacheUtils.getTradeFilterOptionBuilder(), reportFilter, scheduler);
+        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(tradeFeed, scheduler);
 
         Flowable<Predicate<Trade>> compositeFilterFeed = subscription.getUserFilterFeed().map(userFilter ->
                 userFilter == null ? reportFilter : new MultiPredicate<>(Arrays.asList(reportFilter, userFilter))

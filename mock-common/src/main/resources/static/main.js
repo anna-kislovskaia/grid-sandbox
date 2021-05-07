@@ -3,6 +3,7 @@
             function stopEventStream() {
                 if (eventStream) {
                     eventStream.close();
+                    eventStream = undefined;
                 }
                 const subscriptionId = document.getElementById('subscriptionId');
                 subscriptionId.innerText='';

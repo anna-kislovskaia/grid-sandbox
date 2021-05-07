@@ -14,10 +14,10 @@ public class UpdateEventEntry<K, V extends BlotterReportRecord<K>> {
     public UpdateEventEntry(V value, V oldValue) {
         this.value = value;
         this.oldValue = oldValue;
-        if (this.value == null && this.oldValue == null) {
-            throw new IllegalArgumentException("Either new or old value must be defined");
+        if (this.value == null) {
+            throw new IllegalArgumentException("Value must be provided");
         }
-        if (this.value != null && this.oldValue != null) {
+        if (this.oldValue != null) {
             if (!this.value.getRecordKey().equals(this.oldValue.getRecordKey())) {
                 throw new IllegalArgumentException("Key records must be equal: " + this.toString());
             }

@@ -39,22 +39,23 @@ class FilterOptionServiceTest {
     @Captor
     private ArgumentCaptor<List<FilterOptionUpdateEntry>> filterResetCaptor;
 
+    private Flowable<UpdateEvent<String, Trade>> snapshotFeed;
+
     @BeforeEach
     void init() {
         testTrades = generateTrades();
         snapshot = testTrades.stream()
                 .collect(Collectors.toMap(Trade::getTradeId, trade -> createEventEntry(trade, null)));
+        snapshotFeed = Flowable.fromSupplier(() ->
+                new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT));
     }
 
     @Test
     public void testFilterTradeUpdated() throws Throwable {
         BehaviorSubject<UpdateEvent<String, Trade>> subject = BehaviorSubject.create();
-        Flowable<UpdateEvent<String, Trade>> feed = subject.toFlowable(BackpressureStrategy.LATEST).startWith(
-                Flowable.fromSupplier(() -> new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT))
-        );
-
+        Flowable<UpdateEvent<String, Trade>> feed = subject.toFlowable(BackpressureStrategy.LATEST).startWith(snapshotFeed);
         FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
-                feed, TRADE_FILTER_OPTION_BUILDER, ACCEPT_ALL, SAME_THREAD_SCHEDULER
+                feed, snapshotFeed, TRADE_FILTER_OPTION_BUILDER, ACCEPT_ALL, SAME_THREAD_SCHEDULER
         );
         filterOptionService.getFilterOptions().subscribe(consumer);
 
@@ -84,12 +85,12 @@ class FilterOptionServiceTest {
     @Test
     public void testFilterTradeRemoved() throws Throwable {
         BehaviorSubject<UpdateEvent<String, Trade>> subject = BehaviorSubject.create();
-        Flowable<UpdateEvent<String, Trade>> feed = subject.toFlowable(BackpressureStrategy.LATEST).startWith(
-                Flowable.fromSupplier(() -> new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT))
-        );
+        Flowable<UpdateEvent<String, Trade>> snapshotFeed =
+                Flowable.fromSupplier(() -> new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT));
+        Flowable<UpdateEvent<String, Trade>> feed = subject.toFlowable(BackpressureStrategy.LATEST).startWith(snapshotFeed);
 
         FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
-                feed, TRADE_FILTER_OPTION_BUILDER, ACCEPT_OPENED, SAME_THREAD_SCHEDULER
+                feed, snapshotFeed, TRADE_FILTER_OPTION_BUILDER, ACCEPT_OPENED, SAME_THREAD_SCHEDULER
         );
         filterOptionService.getFilterOptions().subscribe(consumer);
 

@@ -16,7 +16,8 @@ import java.util.stream.Stream;
 @AllArgsConstructor
 @Log4j2
 public class FilterOptionService<K, V extends BlotterReportRecord<K>> {
-    private Flowable<UpdateEvent<K, V>> feed;
+    private Flowable<UpdateEvent<K, V>> updateFeed;
+    private Flowable<UpdateEvent<K, V>> snapshotFeed;
     private FilterOptionBuilder<V> filterBuilder;
     private Predicate<V> filter;
     private Scheduler scheduler;
@@ -24,10 +25,9 @@ public class FilterOptionService<K, V extends BlotterReportRecord<K>> {
     private final AtomicReference<Map<String, FilterOptionUpdateEntry>> lastOptions = new AtomicReference<>();
 
     public Flowable<List<FilterOptionUpdateEntry>> getFilterOptions() {
-        return feed.filter(this::filterOptionsMightChange)
-                .switchMap(event -> feed)
+        return updateFeed.filter(this::filterOptionsMightChange)
+                .switchMap(event -> snapshotFeed)
                 .subscribeOn(scheduler)
-                .filter(event -> event.getType() == UpdateEvent.Type.SNAPSHOT)
                 .map(event -> {
                     log.info("Recalculate filter options");
                     Stream<V> valueStream = event.getUpdates().stream().map(UpdateEventEntry::getValue).filter(filter);
@@ -51,14 +51,15 @@ public class FilterOptionService<K, V extends BlotterReportRecord<K>> {
                     if (value == null) {
                         return true;
                     }
-                    // value does not match fitler
+                    // value does not match filter
                     if (entry.getOldValue() != null && filter.test(entry.getOldValue()) && !filter.test(value)) {
                         return true;
                     }
                     // options extended
-                    return filterBuilder.getFilterOptions(Stream.of(value)).stream().anyMatch(filterEntry ->
-                            !currentOptions.containsKey(filterEntry.getName()) ||
-                            !currentOptions.get(filterEntry.getName()).getOptions().containsAll(filterEntry.getOptions()));
+                    return filter.test(value) &&
+                            filterBuilder.getFilterOptions(Stream.of(value)).stream().anyMatch(filterEntry ->
+                                !currentOptions.containsKey(filterEntry.getName()) ||
+                                !currentOptions.get(filterEntry.getName()).getOptions().containsAll(filterEntry.getOptions()));
                 });
     }
 
