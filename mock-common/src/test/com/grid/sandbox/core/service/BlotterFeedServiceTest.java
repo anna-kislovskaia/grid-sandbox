@@ -60,7 +60,7 @@ class BlotterFeedServiceTest {
 
         feedService.reset(testTrades);
         verify(consumer, times(1)).accept(eventCaptor.capture());
-        assertEquals(2, eventCaptor.getAllValues().size());
+        assertEquals(1, eventCaptor.getAllValues().size());
         UpdateEvent<String, Trade> event = eventCaptor.getValue();
         assertTrue(event.isSnapshot());
         Trade testTrade = eventCaptor.getValue().getUpdates().stream()
@@ -170,7 +170,7 @@ class BlotterFeedServiceTest {
         int statusCount = TradeStatus.values().length;
         int startIndex = testTrades.size() + 1;
         String[] clients = {"Client 2", "Client 3", "Client 4"};
-        Disposable updateSubscription = Flowable.interval(10, TimeUnit.MICROSECONDS).forEach(i -> {
+        Disposable updateSubscription = Flowable.interval(100, TimeUnit.MICROSECONDS).forEach(i -> {
             long nextNewTradeId = startIndex + i;
             long tradeId = i > 0 && i % 3 == 0 ? nextNewTradeId / 2 : nextNewTradeId;
             Trade update = Trade.builder()
@@ -190,8 +190,9 @@ class BlotterFeedServiceTest {
 
         Thread.sleep(100);
 
+        // close updater and wait for all events
         updateSubscription.dispose();
-        Thread.sleep(500);
+        Thread.sleep(1000);
 
         // test events applicable
         Map<String, Trade> snapshot = new HashMap<>();
@@ -209,5 +210,14 @@ class BlotterFeedServiceTest {
                 });
             }
         }
+
+        UpdateEvent<String, Trade> event = feedService.getSnapshotFeed().take(1)
+                .subscribeOn(SAME_THREAD_SCHEDULER)
+                .toList()
+                .blockingGet()
+                .get(0);
+        assertEquals(event.getUpdates().size(), snapshot.size());
+        event.getUpdates().stream().map(UpdateEventEntry::getValue)
+                .forEach(value -> assertSame(value, snapshot.get(value.getRecordKey())));
     }
 }

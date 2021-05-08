@@ -17,7 +17,8 @@ import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BinaryOperator;
 import java.util.stream.Collectors;
 
 @Log4j2
@@ -106,6 +107,7 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                     log.info("Buffer update event {}", event);
                     bufferedEvents.add(event);
                 });
+        List<UpdateEvent<K, V>> processed = new CopyOnWriteArrayList<>();
         return snapshotEventFlowable
                 .subscribeOn(scheduler)
                 .take(1)
@@ -113,21 +115,47 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                 .map(event -> {
                     if (!bufferedSubscription.isDisposed()) {
                         List<UpdateEvent<K, V>> missedEvents = new ArrayList<>(bufferedEvents.size());
-                        if (event.isSnapshot()) {
+                        if (event.isSnapshot() && processed.isEmpty()) {
                             bufferedEvents.drainTo(missedEvents);
-                            UpdateEvent<K, V> snapshotEvent = mergeBufferedSnapshotUpdates(event, missedEvents);
-                            return snapshotEvent;
+                            UpdateEvent<K, V> snapshot = mergeBufferedSnapshotUpdates(event, missedEvents);
+                            processed.add(snapshot);
+                            processed.addAll(missedEvents);
+                            return snapshot;
                         } else {
                             bufferedSubscription.dispose();
                             log.info("Dispose buffer subscription");
                             bufferedEvents.drainTo(missedEvents);
-                            missedEvents.add(event);
-                            return mergeBufferedUpdateEvents(missedEvents);
+                            Map<K, UpdateEventEntry<K, V>> reportedRecords = processed.stream()
+                                    .flatMap(reported -> reported.getUpdates().stream())
+                                    .collect(Collectors.toMap(UpdateEventEntry::getRecordKey, entry -> entry, greaterVersionMerger()));
+                            processed.addAll(missedEvents);
+                            int index = processed.indexOf(event);
+                            int size = processed.size();
+                            log.info("Processed event index {} of size {}", index, size);
+                            if (index < 0) {
+                                missedEvents.add(event);
+                            } else {
+                                // cleanup processed event list
+                                List<UpdateEvent<K, V>> copy = new ArrayList<>(processed);
+                                processed.clear();
+                                if (index + 1 < size) {
+                                    processed.addAll(copy.subList(index + 1, size));
+                                }
+                            }
+                            return mergeBufferedUpdateEvents(reportedRecords, missedEvents);
                         }
+                    }
+                    if (!processed.isEmpty() && processed.remove(event)) {
+                        // skip processed event
+                        return new UpdateEvent<K, V>(Collections.emptyList(), UpdateEvent.Type.INCREMENTAL);
                     }
                     return event;
                 })
                 .filter(event -> !event.isEmpty());
+    }
+
+    private static <T, E extends BlotterReportRecord<T>> BinaryOperator<UpdateEventEntry<T, E>> greaterVersionMerger() {
+        return (value1, value2) -> value1.getVersion() > value2.getVersion() ? value1 : value2;
     }
 
     private UpdateEvent<K, V> createSnapshotEvent(Map<K, V> snapshot) {
@@ -160,7 +188,7 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
         return new UpdateEvent<>(snapshot.values(), UpdateEvent.Type.SNAPSHOT);
     }
 
-    private UpdateEvent<K, V> mergeBufferedUpdateEvents(List<UpdateEvent<K, V>> bufferedUpdates) {
+    private UpdateEvent<K, V> mergeBufferedUpdateEvents(Map<K, UpdateEventEntry<K, V>> reportedRecords, List<UpdateEvent<K, V>> bufferedUpdates) {
         if (bufferedUpdates.size() == 1) {
             return bufferedUpdates.get(0);
         }
@@ -172,7 +200,13 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                     K key = entry.getRecordKey();
                     UpdateEventEntry<K, V> current = entries.get(key);
                     if (current == null) {
-                        entries.put(key, entry);
+                        UpdateEventEntry<K, V> reported = reportedRecords.get(key);
+                        if (reported == null || reported.getVersion() < entry.getVersion()) {
+                            V oldValue = reported != null ? reported.getValue() : entry.getOldValue();
+                            long oldVersion = oldValue != null ? oldValue.getRecordVersion() : 0;
+                            log.info("Update from buffer {}: {} -> {}", entry.getRecordKey(), oldVersion, entry.getVersion());
+                            entries.put(key, new UpdateEventEntry<>(entry.getValue(), oldValue));
+                        }
                     } else {
                         if (entry.getVersion() > current.getVersion()) {
                             UpdateEventEntry<K, V> updated = new UpdateEventEntry<>(entry.getValue(), current.getOldValue());
