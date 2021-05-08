@@ -27,8 +27,6 @@ import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static com.grid.sandbox.utils.CacheUtils.TRADE_KEY_MAPPER;
-
 @ExtendWith(MockitoExtension.class)
 class BlotterUnpagableReportServiceTest {
     private final Pageable request = new UnpagedRequest();

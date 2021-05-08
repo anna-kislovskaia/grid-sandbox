@@ -27,6 +27,10 @@ public class UpdateEventEntry<K, V extends BlotterReportRecord<K>> {
         }
     }
 
+    public long getVersion() {
+        return value.getRecordVersion();
+    }
+
 
     public static <K, V extends BlotterReportRecord<K>> UpdateEventEntry<K, V> addedValue(V value) {
         return new UpdateEventEntry<>(value, null);

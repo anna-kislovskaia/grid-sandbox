@@ -27,7 +27,6 @@ public class CacheUtils {
                 return result;
             };
 
-    public static Function<Trade, String> TRADE_KEY_MAPPER = Trade::getTradeId;
 
     public static final Predicate<Trade> ACCEPT_ALL = trade -> true;
     public static final Predicate<Trade> ACCEPT_OPENED = trade -> !trade.getStatus().isFinal();

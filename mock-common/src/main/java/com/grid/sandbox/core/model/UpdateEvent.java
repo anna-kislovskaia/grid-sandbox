@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 
-import java.util.List;
+import java.util.Collection;
 import java.util.StringJoiner;
 
 @Data
@@ -15,7 +15,7 @@ public class UpdateEvent<K, V extends BlotterReportRecord<K>> {
         SNAPSHOT, INCREMENTAL
     }
 
-    private final List<UpdateEventEntry<K, V>> updates;
+    private final Collection<UpdateEventEntry<K, V>> updates;
     private final Type type;
 
     @Override

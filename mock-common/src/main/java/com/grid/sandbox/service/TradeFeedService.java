@@ -6,6 +6,7 @@ import com.grid.sandbox.core.model.UpdateEvent;
 import com.grid.sandbox.core.model.UpdateEventEntry;
 import com.hazelcast.replicatedmap.ReplicatedMap;
 import io.reactivex.Flowable;
+import io.reactivex.Scheduler;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -64,8 +65,8 @@ public class TradeFeedService {
                 });
     }
 
-    public Flowable<UpdateEvent<String, Trade>> getTradeFeed() {
-        return feedService.getFeed();
+    public Flowable<UpdateEvent<String, Trade>> getTradeFeed(Scheduler scheduler) {
+        return feedService.getFeed(scheduler);
     }
 
     public Flowable<UpdateEvent<String, Trade>> getTradeSnapshotFeed() {

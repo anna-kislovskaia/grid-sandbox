@@ -35,9 +35,9 @@ public class TradeReportService {
     public Flowable<PageUpdate<Trade>> getTrades(ReportSubscription<Trade> subscription, Predicate<Trade> reportFilter) {
         String feedId = "tradeFeed-" + subscription.getSubscriptionId();
         log.info("{} Subscription requested", feedId);
-        Flowable<UpdateEvent<String, Trade>> tradeFeed = tradeFeedService.getTradeFeed()
-                .doOnCancel(() -> log.info("{} Subscription cancelled", feedId));
         Scheduler scheduler = subscription.getScheduler();
+        Flowable<UpdateEvent<String, Trade>> tradeFeed = tradeFeedService.getTradeFeed(scheduler)
+                .doOnCancel(() -> log.info("{} Subscription cancelled", feedId));
         FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
                 tradeFeed, tradeFeedService.getTradeSnapshotFeed(), CacheUtils.getTradeFilterOptionBuilder(), reportFilter, scheduler);
         BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(tradeFeed, scheduler);
