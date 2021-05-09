@@ -36,6 +36,10 @@ public class UpdateEventEntry<K, V extends BlotterReportRecord<K>> {
         return new UpdateEventEntry<>(value, null);
     }
 
+    public static <K, V extends BlotterReportRecord<K>> long getVersion(UpdateEventEntry<K, V> entry) {
+        return entry == null ? 0 : entry.getVersion();
+    }
+
     public K getRecordKey() {
         return this.value != null ? this.value.getRecordKey() : this.oldValue.getRecordKey();
     }

@@ -22,6 +22,8 @@ import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import static com.grid.sandbox.utils.TestHelpers.SAME_THREAD_SCHEDULER;
 import static com.grid.sandbox.utils.TestHelpers.generateTrades;
@@ -118,6 +120,42 @@ class BlotterFeedServiceTest {
         assertEquals(Long.MAX_VALUE, event.getUpdates().iterator().next().getValue().getLastUpdateTimestamp());
     }
 
+    @Test
+    void testMergeAlreadyReported() {
+        UpdateEvent<String, Trade> snapshot = BlotterFeedService.createSnapshotEvent(
+                testTrades.stream().collect(Collectors.toMap(Trade::getTradeId, trade -> trade))
+        );
+
+        List<UpdateEvent<String, Trade>> staleUpdates = testTrades.stream()
+                .map(trade -> new UpdateEventEntry<>(trade, trade.toBuilder().status(TradeStatus.DRAFT).lastUpdateTimestamp(0).build()))
+                .map(entry -> new UpdateEvent<>(Collections.singleton(entry), UpdateEvent.Type.INCREMENTAL))
+                .collect(Collectors.toList());
+        UpdateEvent<String, Trade> updateEvent = BlotterFeedService.mergeBufferedUpdateEvents(snapshot, staleUpdates);
+        assertTrue(updateEvent.isEmpty());
+    }
+
+    @Test
+    void testMergeStaleAndUpdated() {
+        UpdateEvent<String, Trade> snapshot = BlotterFeedService.createSnapshotEvent(
+                testTrades.stream().collect(Collectors.toMap(Trade::getTradeId, trade -> trade))
+        );
+
+        Trade original = testTrades.get(testTrades.size() / 2);
+        Trade stale = original.toBuilder().status(TradeStatus.DRAFT).lastUpdateTimestamp(0).build();
+        Trade middle = original.toBuilder().status(TradeStatus.REJECTED).lastUpdateTimestamp(original.getLastUpdateTimestamp() + 5).build();
+        Trade updated = original.toBuilder().status(TradeStatus.CANCELLED).lastUpdateTimestamp(original.getLastUpdateTimestamp() + 10).build();
+        List<UpdateEvent<String, Trade>> staleUpdates = Arrays.asList(
+                new UpdateEvent<>(Collections.singleton(new UpdateEventEntry<>(original, stale)), UpdateEvent.Type.INCREMENTAL),
+                new UpdateEvent<>(Collections.singleton(new UpdateEventEntry<>(middle, original)), UpdateEvent.Type.INCREMENTAL),
+                new UpdateEvent<>(Collections.singleton(new UpdateEventEntry<>(updated, middle)), UpdateEvent.Type.INCREMENTAL)
+        );
+        UpdateEvent<String, Trade> updateEvent = BlotterFeedService.mergeBufferedUpdateEvents(snapshot, staleUpdates);
+        assertEquals(1, updateEvent.getUpdates().size());
+        UpdateEventEntry<String, Trade> entry = updateEvent.getUpdates().iterator().next();
+        assertSame(updated, entry.getValue());
+        assertSame(original, entry.getOldValue());
+    }
+
     @RepeatedTest(3)
     void testGetAllNewFeed() throws Throwable {
         feedService.reset(testTrades);
@@ -137,7 +175,7 @@ class BlotterFeedServiceTest {
         });
 
         List<UpdateEvent<String, Trade>> allEvents = new CopyOnWriteArrayList<>();
-        feedService.getFeed(Schedulers.single())
+        feedService.getFeed(Schedulers.newThread())
                 .doOnNext(event -> log.info(event.toShortString()))
                 .subscribe(allEvents::add);
 
@@ -184,15 +222,21 @@ class BlotterFeedServiceTest {
         });
 
         List<UpdateEvent<String, Trade>> allEvents = new CopyOnWriteArrayList<>();
-        feedService.getFeed(Schedulers.single())
-                .doOnNext(event -> log.info(event.toShortString()))
+        AtomicLong lastUpdateTime = new AtomicLong();
+        feedService.getFeed(Schedulers.newThread())
+                .doOnNext((event) -> {
+                    log.info(event);
+                    lastUpdateTime.set(System.currentTimeMillis());
+                })
                 .subscribe(allEvents::add);
 
-        Thread.sleep(100);
+        Thread.sleep(32);
 
         // close updater and wait for all events
         updateSubscription.dispose();
-        Thread.sleep(1000);
+        while (lastUpdateTime.get() == 0 || System.currentTimeMillis() - lastUpdateTime.get() < 1000) {
+            Thread.sleep(100);
+        }
 
         // test events applicable
         Map<String, Trade> snapshot = new HashMap<>();
