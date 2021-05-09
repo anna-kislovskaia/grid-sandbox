@@ -101,7 +101,9 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
         Flowable<UpdateEvent<K, V>> initialSnapshotFeed = snapshotEventFlowable.take(1)
                 .subscribeOn(scheduler)
                 .observeOn(scheduler);
-        Flowable<UpdateEvent<K, V>> eventFeed = updateEventFlowable.observeOn(scheduler);
+        Flowable<UpdateEvent<K, V>> eventFeed = updateEventFlowable
+                .onBackpressureBuffer(updateEventBufferSize)
+                .observeOn(scheduler);
         AtomicReference<Map<K, V>> initialRecords = new AtomicReference<>();
         return Flowable.merge(eventFeed, initialSnapshotFeed)
                 .map(event -> {

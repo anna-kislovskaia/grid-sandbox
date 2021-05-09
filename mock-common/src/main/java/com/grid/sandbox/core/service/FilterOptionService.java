@@ -20,17 +20,15 @@ public class FilterOptionService<K, V extends BlotterReportRecord<K>> {
     private Flowable<UpdateEvent<K, V>> snapshotFeed;
     private FilterOptionBuilder<V> filterBuilder;
     private Predicate<V> filter;
-    private Scheduler scheduler;
 
     private final AtomicReference<Map<String, FilterOptionUpdateEntry>> lastOptions = new AtomicReference<>();
 
     public Flowable<List<FilterOptionUpdateEntry>> getFilterOptions() {
         return updateFeed.filter(this::filterOptionsMightChange)
-                .switchMap(event -> snapshotFeed)
-                .subscribeOn(scheduler)
                 .map(event -> {
                     log.info("Recalculate filter options");
-                    Stream<V> valueStream = event.getUpdates().stream().map(UpdateEventEntry::getValue).filter(filter);
+                    UpdateEvent<K, V> snapshot = snapshotFeed.blockingFirst();
+                    Stream<V> valueStream = snapshot.getUpdates().stream().map(UpdateEventEntry::getValue).filter(filter);
                     List<FilterOptionUpdateEntry> options = filterBuilder.getFilterOptions(valueStream);
                     Map<String, FilterOptionUpdateEntry> updatedOptions = options.stream()
                             .collect(Collectors.toMap(FilterOptionUpdateEntry::getName, entry -> entry));

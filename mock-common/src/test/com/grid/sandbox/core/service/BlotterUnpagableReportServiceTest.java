@@ -4,7 +4,6 @@ import com.grid.sandbox.controller.UnpagedRequest;
 import com.grid.sandbox.core.model.PageUpdate;
 import com.grid.sandbox.core.model.UpdateEvent;
 import com.grid.sandbox.core.model.UpdateEventEntry;
-import com.grid.sandbox.core.service.BlotterReportService;
 import com.grid.sandbox.core.utils.MultiComparator;
 import com.grid.sandbox.model.*;
 import io.reactivex.Flowable;
@@ -30,6 +29,7 @@ import java.util.stream.Collectors;
 @ExtendWith(MockitoExtension.class)
 class BlotterUnpagableReportServiceTest {
     private final Pageable request = new UnpagedRequest();
+    private final BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>();
     private List<Trade> testTrades ;
     private Map<String, UpdateEventEntry<String, Trade>> snapshot;
     @Mock
@@ -49,9 +49,7 @@ class BlotterUnpagableReportServiceTest {
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
                 new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT)
         );
-        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(
-                feed, SAME_THREAD_SCHEDULER);
-        blotterReportService.getReport(request, ACCEPT_ALL, ID_COMPARATOR).subscribe(consumer);
+        blotterReportService.getReport(feed, request, ACCEPT_ALL, ID_COMPARATOR).subscribe(consumer);
 
 
         verify(consumer, times(1)).accept(pageUpdateCaptor.capture());
@@ -66,14 +64,11 @@ class BlotterUnpagableReportServiceTest {
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
                 new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT)
         );
-        Comparator<Trade> comparator = new MultiComparator<>(
+        Comparator<Trade> comparator = new MultiComparator<>(Arrays.asList(
                 Comparator.comparing(Trade::getClient),
                 Comparator.comparing(Trade::getBalance),
-                ID_COMPARATOR);
-        BlotterReportService<String, Trade> blotterReportService =
-                new BlotterReportService<>(feed, SAME_THREAD_SCHEDULER);
-        blotterReportService.getReport(new UnpagedRequest(), ACCEPT_ALL, comparator).subscribe(consumer);
-
+                ID_COMPARATOR));
+        blotterReportService.getReport(feed, new UnpagedRequest(), ACCEPT_ALL, comparator).subscribe(consumer);
 
         verify(consumer, times(1)).accept(pageUpdateCaptor.capture());
         List<PageUpdate<Trade>> updates = pageUpdateCaptor.getAllValues();
@@ -98,13 +93,11 @@ class BlotterUnpagableReportServiceTest {
                 new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT),
                 new UpdateEvent<>(Collections.singletonList(createEventEntry(client1_1_upd, client1_1)), UpdateEvent.Type.INCREMENTAL)
         );
-        Comparator<Trade> comparator = new MultiComparator<>(
+        Comparator<Trade> comparator = new MultiComparator<>(Arrays.asList(
                 Comparator.comparing(Trade::getClient),
                 Comparator.comparing(Trade::getBalance),
-                ID_COMPARATOR);
-        BlotterReportService<String, Trade> blotterReportService =
-                new BlotterReportService<>(feed, SAME_THREAD_SCHEDULER);
-        blotterReportService.getReport(request, ACCEPT_ALL, comparator).subscribe(consumer);
+                ID_COMPARATOR));
+        blotterReportService.getReport(feed, request, ACCEPT_ALL, comparator).subscribe(consumer);
 
         verify(consumer, times(2)).accept(pageUpdateCaptor.capture());
         List<PageUpdate<Trade>> updates = pageUpdateCaptor.getAllValues();
@@ -125,13 +118,11 @@ class BlotterUnpagableReportServiceTest {
                 new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT),
                 new UpdateEvent<>(Collections.singletonList(createEventEntry(trade10_upd, trade10)), UpdateEvent.Type.INCREMENTAL)
         );
-        Comparator<Trade> comparator = new MultiComparator<>(
+        Comparator<Trade> comparator = new MultiComparator<>(Arrays.asList(
                 Comparator.comparing(Trade::getClient),
                 Comparator.comparing(Trade::getBalance),
-                ID_COMPARATOR);
-        BlotterReportService<String, Trade> blotterReportService =
-                new BlotterReportService<>(feed, SAME_THREAD_SCHEDULER);
-        blotterReportService.getReport(request, ACCEPT_OPENED, comparator).subscribe(consumer);
+                ID_COMPARATOR));
+        blotterReportService.getReport(feed, request, ACCEPT_OPENED, comparator).subscribe(consumer);
 
         verify(consumer, times(2)).accept(pageUpdateCaptor.capture());
         List<PageUpdate<Trade>> updates = pageUpdateCaptor.getAllValues();

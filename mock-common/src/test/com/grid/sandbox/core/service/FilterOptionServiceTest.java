@@ -55,7 +55,7 @@ class FilterOptionServiceTest {
         BehaviorSubject<UpdateEvent<String, Trade>> subject = BehaviorSubject.create();
         Flowable<UpdateEvent<String, Trade>> feed = subject.toFlowable(BackpressureStrategy.LATEST).startWith(snapshotFeed);
         FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
-                feed, snapshotFeed, TRADE_FILTER_OPTION_BUILDER, ACCEPT_ALL, SAME_THREAD_SCHEDULER
+                feed, snapshotFeed, TRADE_FILTER_OPTION_BUILDER, ACCEPT_ALL
         );
         filterOptionService.getFilterOptions().subscribe(consumer);
 
@@ -90,7 +90,7 @@ class FilterOptionServiceTest {
         Flowable<UpdateEvent<String, Trade>> feed = subject.toFlowable(BackpressureStrategy.LATEST).startWith(snapshotFeed);
 
         FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
-                feed, snapshotFeed, TRADE_FILTER_OPTION_BUILDER, ACCEPT_OPENED, SAME_THREAD_SCHEDULER
+                feed, snapshotFeed, TRADE_FILTER_OPTION_BUILDER, ACCEPT_OPENED
         );
         filterOptionService.getFilterOptions().subscribe(consumer);
 

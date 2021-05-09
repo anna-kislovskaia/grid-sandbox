@@ -254,16 +254,19 @@ class BlotterFeedServiceTest {
                     log.info(event);
                     lastUpdateTime.set(System.currentTimeMillis());
                 })
+                .doOnError(log::error)
                 .subscribe(allEvents::add);
 
         Thread.sleep(32);
 
+        log.info("Dispose subscription");
         // close updater and wait for all events
         updateSubscription.dispose();
         while (lastUpdateTime.get() == 0 || System.currentTimeMillis() - lastUpdateTime.get() < 300) {
             Thread.sleep(100);
         }
 
+        log.info("Start evaluation");
         // test events applicable
         Map<String, Trade> snapshot = new HashMap<>();
         for(UpdateEvent<String, Trade> event : allEvents) {

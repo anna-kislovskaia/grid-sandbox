@@ -6,7 +6,6 @@ import com.grid.sandbox.core.model.UpdateEvent;
 import com.grid.sandbox.core.model.UpdateEventEntry;
 import com.grid.sandbox.core.utils.RedBlackBST;
 import io.reactivex.Flowable;
-import io.reactivex.Scheduler;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.data.domain.Pageable;
@@ -20,13 +19,10 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
 
-    private Flowable<UpdateEvent<K, V>> feed;
-    private Scheduler scheduler;
-
-    public Flowable<PageUpdate<V>> getReport(Pageable request, Predicate<V> filter, Comparator<V> comparator) {
+    public Flowable<PageUpdate<V>> getReport(Flowable<UpdateEvent<K, V>> feed, Pageable request, Predicate<V> filter, Comparator<V> comparator) {
         final RedBlackBST<V, V> sortedValue = new RedBlackBST<>(comparator);
         final AtomicReference<Map<K, V>> page = new AtomicReference<>(new HashMap<>());
-        return feed.subscribeOn(scheduler)
+        return feed
                 .map(updateEvent -> {
                     Map<K, V> changed = handleValueUpdates(updateEvent, filter, sortedValue);
                     boolean snapshot = updateEvent.getType() == UpdateEvent.Type.SNAPSHOT;

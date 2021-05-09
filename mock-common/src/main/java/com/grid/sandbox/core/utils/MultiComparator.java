@@ -12,10 +12,6 @@ public class MultiComparator<V> implements Comparator<V> {
         this.comparators = comparators;
     }
 
-    public MultiComparator(Comparator<V>... comparators) {
-        this.comparators = Arrays.asList(comparators);
-    }
-
     @Override
     public int compare(V o1, V o2) {
         int result = 0;

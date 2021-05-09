@@ -30,6 +30,7 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class BlotterPagableReportServiceTest {
     private final Pageable request = PageRequest.of(1, 4);
+    private final BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>();
 
     private List<Trade> testTrades;
     private Map<String, UpdateEventEntry<String, Trade>> snapshot;
@@ -50,10 +51,7 @@ class BlotterPagableReportServiceTest {
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
                 new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT)
         );
-        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(
-                feed, SAME_THREAD_SCHEDULER);
-        blotterReportService.getReport(request, ACCEPT_ALL, ID_COMPARATOR).subscribe(consumer);
-
+        blotterReportService.getReport(feed, request, ACCEPT_ALL, ID_COMPARATOR).subscribe(consumer);
 
         verify(consumer, times(1)).accept(pageUpdateCaptor.capture());
         PageUpdate<Trade> snapshotUpdate = pageUpdateCaptor.getValue();
@@ -70,14 +68,11 @@ class BlotterPagableReportServiceTest {
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
                 new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT)
         );
-        Comparator<Trade> comparator = new MultiComparator<>(
+        Comparator<Trade> comparator = new MultiComparator<>(Arrays.asList(
                 Comparator.comparing(Trade::getClient),
                 Comparator.comparing(Trade::getBalance),
-                ID_COMPARATOR);
-        BlotterReportService<String, Trade> blotterReportService =
-                new BlotterReportService<>(feed, SAME_THREAD_SCHEDULER);
-        blotterReportService.getReport(request, ACCEPT_ALL, comparator).subscribe(consumer);
-
+                ID_COMPARATOR));
+        blotterReportService.getReport(feed, request, ACCEPT_ALL, comparator).subscribe(consumer);
 
         verify(consumer, times(1)).accept(pageUpdateCaptor.capture());
         List<PageUpdate<Trade>> updates = pageUpdateCaptor.getAllValues();
@@ -99,13 +94,11 @@ class BlotterPagableReportServiceTest {
                 new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT),
                 new UpdateEvent<>(Collections.singletonList(createEventEntry(trade15_upd, trade15)), UpdateEvent.Type.INCREMENTAL)
         );
-        Comparator<Trade> comparator = new MultiComparator<>(
+        Comparator<Trade> comparator = new MultiComparator<>(Arrays.asList(
                 Comparator.comparing(Trade::getClient),
                 Comparator.comparing(Trade::getBalance),
-                ID_COMPARATOR);
-        BlotterReportService<String, Trade> blotterReportService =
-                new BlotterReportService<>(feed, SAME_THREAD_SCHEDULER);
-        blotterReportService.getReport(request, ACCEPT_ALL, comparator).subscribe(consumer);
+                ID_COMPARATOR));
+        blotterReportService.getReport(feed, request, ACCEPT_ALL, comparator).subscribe(consumer);
 
         verify(consumer, times(2)).accept(pageUpdateCaptor.capture());
         List<PageUpdate<Trade>> updates = pageUpdateCaptor.getAllValues();
@@ -136,13 +129,11 @@ class BlotterPagableReportServiceTest {
                         createEventEntry(setStatus(trade4, TradeStatus.CANCELLED), trade4)
                 ), UpdateEvent.Type.INCREMENTAL)
         );
-        Comparator<Trade> comparator = new MultiComparator<>(
+        Comparator<Trade> comparator = new MultiComparator<>(Arrays.asList(
                 Comparator.comparing(Trade::getClient),
                 Comparator.comparing(Trade::getBalance),
-                ID_COMPARATOR);
-        BlotterReportService<String, Trade> blotterReportService =
-                new BlotterReportService<>(feed, SAME_THREAD_SCHEDULER);
-        blotterReportService.getReport(request, ACCEPT_OPENED, comparator).subscribe(consumer);
+                ID_COMPARATOR));
+        blotterReportService.getReport(feed, request, ACCEPT_OPENED, comparator).subscribe(consumer);
 
         verify(consumer, times(2)).accept(pageUpdateCaptor.capture());
         List<PageUpdate<Trade>> events = pageUpdateCaptor.getAllValues();

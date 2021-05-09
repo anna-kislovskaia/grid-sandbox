@@ -19,6 +19,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
 @Service
@@ -36,20 +37,24 @@ public class TradeReportService {
         String feedId = "tradeFeed-" + subscription.getSubscriptionId();
         log.info("{} Subscription requested", feedId);
         Scheduler scheduler = subscription.getScheduler();
-        Flowable<UpdateEvent<String, Trade>> tradeFeed = tradeFeedService.getTradeFeed(scheduler)
-                .doOnCancel(() -> log.info("{} Subscription cancelled", feedId));
         FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
-                tradeFeed, tradeFeedService.getTradeSnapshotFeed(), CacheUtils.getTradeFilterOptionBuilder(), reportFilter, scheduler);
-        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(tradeFeed, scheduler);
+                tradeFeedService.getTradeFeed(scheduler),
+                tradeFeedService.getTradeSnapshotFeed(),
+                CacheUtils.getTradeFilterOptionBuilder(),
+                reportFilter
+        );
 
         Flowable<Predicate<Trade>> compositeFilterFeed = subscription.getUserFilterFeed().map(userFilter ->
                 userFilter == null ? reportFilter : new MultiPredicate<>(Arrays.asList(reportFilter, userFilter))
         );
         Flowable<PageUpdate<Trade>> valueFeed = Flowable
                 .combineLatest(subscription.getRequestFeed(), compositeFilterFeed, RequestParams::new)
+                .throttleLast(1000, TimeUnit.MILLISECONDS)
                 .switchMap(params -> {
                     Comparator<Trade> comparator = getTradeComparatorBySort(params.request.getSort());
-                    return blotterReportService.getReport(params.request, params.filter, comparator);
+                    Flowable<UpdateEvent<String, Trade>> tradeFeed = tradeFeedService.getTradeFeed(scheduler);
+                    BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>();
+                    return blotterReportService.getReport(tradeFeed, params.request, params.filter, comparator);
                 });
 
         return Flowable.combineLatest(
@@ -59,7 +64,9 @@ public class TradeReportService {
                         .filterOptions(filters)
                         .subscriptionId(subscription.getSubscriptionId())
                         .build()
-        );
+        )
+                .doOnCancel(() -> log.info("{} Subscription cancelled", feedId))
+                .doOnError(log::error);
 
     }
 
