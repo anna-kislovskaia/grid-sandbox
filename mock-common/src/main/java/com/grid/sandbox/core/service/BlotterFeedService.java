@@ -144,7 +144,7 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                     if (!processed.isEmpty() && processed.remove(event)) {
                         log.info("Skip processed event {}", event);
                         // skip processed event
-                        return new UpdateEvent<K, V>(Collections.emptyList(), UpdateEvent.Type.INCREMENTAL);
+                        return UpdateEvent.<K, V>empty();
                     }
                     return event;
                 })
@@ -165,7 +165,10 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
         return new UpdateEvent<>(eventSnapshot, UpdateEvent.Type.SNAPSHOT);
     }
 
-    private UpdateEvent<K, V> mergeBufferedSnapshotUpdates(UpdateEvent<K, V> original, List<UpdateEvent<K, V>> bufferedUpdates) {
+    private static  <K, V extends BlotterReportRecord<K>> UpdateEvent<K, V> mergeBufferedSnapshotUpdates(
+            UpdateEvent<K, V> original,
+            List<UpdateEvent<K, V>> bufferedUpdates)
+    {
         if (bufferedUpdates.isEmpty()) {
             return original;
         }
@@ -186,10 +189,22 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
         return new UpdateEvent<>(snapshot.values(), UpdateEvent.Type.SNAPSHOT);
     }
 
-    static <K, V extends BlotterReportRecord<K>>  UpdateEvent<K, V> mergeBufferedUpdateEvents(UpdateEvent<K, V> snapshot, List<UpdateEvent<K, V>> bufferedUpdates) {
+    static <K, V extends BlotterReportRecord<K>>  UpdateEvent<K, V> mergeBufferedUpdateEvents(
+            UpdateEvent<K, V> snapshot,
+            List<UpdateEvent<K, V>> bufferedUpdates)
+    {
         log.info("Merge {} buffered update events to {}", bufferedUpdates.size(), snapshot.toShortString());
         if (!snapshot.isSnapshot()) {
             throw new IllegalArgumentException("Snapshot event is expected");
+        }
+        // check if has further snapshot
+        Optional<UpdateEvent<K, V>> nextSnapshot = bufferedUpdates.stream().filter(UpdateEvent::isSnapshot).findFirst();
+        if (nextSnapshot.isPresent()) {
+            int index = bufferedUpdates.indexOf(nextSnapshot.get());
+            log.info("Snapshot buffered event found at [{}] of size {}", index, bufferedUpdates.size());
+            List<UpdateEvent<K, V>> nextEvents = index + 1 < bufferedUpdates.size() ?
+                    bufferedUpdates.subList(index + 1, bufferedUpdates.size()) : Collections.emptyList();
+            return mergeBufferedSnapshotUpdates(nextSnapshot.get(), nextEvents);
         }
         Map<K, UpdateEventEntry<K, V>> reportedRecords = snapshot.getUpdates().stream()
                 .collect(Collectors.toMap(UpdateEventEntry::getRecordKey, entry -> entry, greaterVersionMerger()));

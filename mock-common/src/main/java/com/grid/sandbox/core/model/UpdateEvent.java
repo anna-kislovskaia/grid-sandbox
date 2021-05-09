@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.Getter;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.StringJoiner;
 
 @Data
@@ -41,4 +42,7 @@ public class UpdateEvent<K, V extends BlotterReportRecord<K>> {
         return "UpdateEvent{" + type + ":" + updates.size() + "}";
     }
 
+    public static <K, V extends BlotterReportRecord<K>> UpdateEvent<K, V> empty() {
+        return new UpdateEvent<K, V>(Collections.emptyList(), Type.INCREMENTAL);
+    }
 }

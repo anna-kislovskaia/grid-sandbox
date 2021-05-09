@@ -156,6 +156,32 @@ class BlotterFeedServiceTest {
         assertSame(original, entry.getOldValue());
     }
 
+    @Test
+    void testMergeSnapshot() {
+        Map<String, Trade> trades = testTrades.stream().collect(Collectors.toMap(Trade::getTradeId, trade -> trade));
+        UpdateEvent<String, Trade> snapshot = BlotterFeedService.createSnapshotEvent(trades);
+
+        Trade original = testTrades.get(testTrades.size() / 2);
+        Trade stale = original.toBuilder().status(TradeStatus.DRAFT).lastUpdateTimestamp(0).build();
+        Trade middle = original.toBuilder().status(TradeStatus.REJECTED).lastUpdateTimestamp(original.getLastUpdateTimestamp() + 5).build();
+        Trade updated = original.toBuilder().status(TradeStatus.CANCELLED).lastUpdateTimestamp(original.getLastUpdateTimestamp() + 10).build();
+
+        trades.put(middle.getTradeId(), middle);
+        UpdateEvent<String, Trade> middleSnapshot = BlotterFeedService.createSnapshotEvent(trades);
+        List<UpdateEvent<String, Trade>> events = Arrays.asList(
+                new UpdateEvent<>(Collections.singleton(new UpdateEventEntry<>(original, stale)), UpdateEvent.Type.INCREMENTAL),
+                middleSnapshot,
+                new UpdateEvent<>(Collections.singleton(new UpdateEventEntry<>(updated, middle)), UpdateEvent.Type.INCREMENTAL)
+        );
+        trades.put(updated.getTradeId(), updated);
+
+        UpdateEvent<String, Trade> updateEvent = BlotterFeedService.mergeBufferedUpdateEvents(snapshot, events);
+        assertTrue(updateEvent.isSnapshot());
+        for(UpdateEventEntry<String, Trade> entry : updateEvent.getUpdates()) {
+            assertSame(entry.getValue(), trades.get(entry.getRecordKey()));
+        }
+    }
+
     @RepeatedTest(3)
     void testGetAllNewFeed() throws Throwable {
         feedService.reset(testTrades);
@@ -208,6 +234,7 @@ class BlotterFeedServiceTest {
         int statusCount = TradeStatus.values().length;
         int startIndex = testTrades.size() + 1;
         String[] clients = {"Client 2", "Client 3", "Client 4"};
+        AtomicLong lastUpdateTime = new AtomicLong();
         Disposable updateSubscription = Flowable.interval(100, TimeUnit.MICROSECONDS).forEach(i -> {
             long nextNewTradeId = startIndex + i;
             long tradeId = i > 0 && i % 3 == 0 ? nextNewTradeId / 2 : nextNewTradeId;
@@ -218,11 +245,11 @@ class BlotterFeedServiceTest {
                     .client(clients[i.intValue() % clients.length])
                     .status(TradeStatus.values()[i.intValue() % statusCount])
                     .build();
+            lastUpdateTime.set(0);
             feedService.update(Collections.singleton(update));
         });
 
         List<UpdateEvent<String, Trade>> allEvents = new CopyOnWriteArrayList<>();
-        AtomicLong lastUpdateTime = new AtomicLong();
         feedService.getFeed(Schedulers.newThread())
                 .doOnNext((event) -> {
                     log.info(event);
