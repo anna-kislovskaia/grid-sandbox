@@ -121,9 +121,7 @@ class BlotterFeedServiceTest {
 
     @Test
     void testMergeAlreadyReported() {
-        UpdateEvent<String, Trade> snapshot = BlotterFeedService.createSnapshotEvent(
-                testTrades.stream().collect(Collectors.toMap(Trade::getTradeId, trade -> trade))
-        );
+        Map<String, Trade> snapshot = testTrades.stream().collect(Collectors.toMap(Trade::getTradeId, trade -> trade));
 
         List<UpdateEvent<String, Trade>> staleUpdates = testTrades.stream()
                 .map(trade -> new UpdateEventEntry<>(trade, trade.toBuilder().status(TradeStatus.DRAFT).lastUpdateTimestamp(0).build()))
@@ -135,9 +133,7 @@ class BlotterFeedServiceTest {
 
     @Test
     void testMergeStaleAndUpdated() {
-        UpdateEvent<String, Trade> snapshot = BlotterFeedService.createSnapshotEvent(
-                testTrades.stream().collect(Collectors.toMap(Trade::getTradeId, trade -> trade))
-        );
+        Map<String, Trade> snapshot = testTrades.stream().collect(Collectors.toMap(Trade::getTradeId, trade -> trade));
 
         Trade original = testTrades.get(testTrades.size() / 2);
         Trade stale = original.toBuilder().status(TradeStatus.DRAFT).lastUpdateTimestamp(0).build();
@@ -172,9 +168,9 @@ class BlotterFeedServiceTest {
                 middleSnapshot,
                 new UpdateEvent<>(Collections.singleton(new UpdateEventEntry<>(updated, middle)), UpdateEvent.Type.INCREMENTAL)
         );
-        trades.put(updated.getTradeId(), updated);
 
-        UpdateEvent<String, Trade> updateEvent = BlotterFeedService.mergeBufferedUpdateEvents(snapshot, events);
+        UpdateEvent<String, Trade> updateEvent = BlotterFeedService.mergeBufferedUpdateEvents(trades, events);
+        trades.put(updated.getTradeId(), updated);
         assertTrue(updateEvent.isSnapshot());
         for(UpdateEventEntry<String, Trade> entry : updateEvent.getUpdates()) {
             assertSame(entry.getValue(), trades.get(entry.getRecordKey()));

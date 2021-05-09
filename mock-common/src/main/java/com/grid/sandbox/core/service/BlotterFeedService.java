@@ -16,7 +16,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BinaryOperator;
 import java.util.stream.Collectors;
 
 @Log4j2
@@ -136,10 +135,6 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                 .filter(event -> !event.isEmpty());
     }
 
-    private static <T, E extends BlotterReportRecord<T>> BinaryOperator<UpdateEventEntry<T, E>> greaterVersionMerger() {
-        return (value1, value2) -> value1.getVersion() > value2.getVersion() ? value1 : value2;
-    }
-
     static  <K, V extends BlotterReportRecord<K>>  UpdateEvent<K, V> createSnapshotEvent(Map<K, V> snapshot) {
         log.info("Snapshot event requested");
         List<UpdateEventEntry<K, V>> eventSnapshot = snapshot.values().stream()
@@ -173,7 +168,7 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
         return new UpdateEvent<>(snapshot.values(), UpdateEvent.Type.SNAPSHOT);
     }
 
-    static <K, V extends BlotterReportRecord<K>>  boolean isEligibleForCorrection(Map<K, V> reported, UpdateEvent<K, V> event){
+    private static <K, V extends BlotterReportRecord<K>> boolean isEligibleForCorrection(Map<K, V> reported, UpdateEvent<K, V> event){
         if (reported.isEmpty()) {
             return false;
         }
@@ -182,17 +177,6 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
             long reportedVersion = getRecordVersion(reportedValue);
             return entry.getVersion() <= reportedVersion || getRecordVersion(entry.getOldValue()) < reportedVersion;
         });
-    }
-
-    static <K, V extends BlotterReportRecord<K>>  UpdateEvent<K, V> mergeBufferedUpdateEvents(
-            UpdateEvent<K, V> event,
-            List<UpdateEvent<K, V>> bufferedUpdates) {
-        if (!event.isSnapshot()) {
-            throw new IllegalArgumentException("Snapshot is expected, but received " + event);
-        }
-        Map<K, V> reportedRecords = event.getUpdates().stream()
-                .collect(Collectors.toMap(UpdateEventEntry::getRecordKey, UpdateEventEntry::getValue));
-        return mergeBufferedUpdateEvents(reportedRecords, bufferedUpdates);
     }
 
     static <K, V extends BlotterReportRecord<K>>  UpdateEvent<K, V> mergeBufferedUpdateEvents(
