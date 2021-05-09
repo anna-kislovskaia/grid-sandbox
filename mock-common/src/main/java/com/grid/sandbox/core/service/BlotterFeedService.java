@@ -6,7 +6,6 @@ import com.grid.sandbox.core.model.UpdateEventEntry;
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
 import io.reactivex.Scheduler;
-import io.reactivex.disposables.Disposable;
 import io.reactivex.subjects.BehaviorSubject;
 import io.reactivex.subjects.PublishSubject;
 import io.reactivex.subjects.Subject;
@@ -14,10 +13,9 @@ import lombok.extern.log4j.Log4j2;
 
 import javax.annotation.PostConstruct;
 import java.util.*;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BinaryOperator;
 import java.util.stream.Collectors;
 
@@ -29,7 +27,7 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
     private final Subject<Collection<V>> updatePublisher = PublishSubject.create();
     private final Flowable<Collection<V>> updateFlowable = updatePublisher.toFlowable(BackpressureStrategy.MISSING);
 
-    private int updateEventBufferSize = 4096;
+    private int updateEventBufferSize = 32000;
 
     private Flowable<UpdateEvent<K, V>> updateEventFlowable;
 
@@ -99,53 +97,37 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
 
     public Flowable<UpdateEvent<K, V>> getFeed(Scheduler scheduler) {
         log.info("Feed requested");
-        BlockingQueue<UpdateEvent<K, V>> bufferedEvents = new ArrayBlockingQueue<>(updateEventBufferSize);
-        // listen in notification thread
-        Disposable bufferedSubscription = updateEventFlowable
-                .subscribe(event -> {
-                    log.info("Buffer update event {}", event);
-                    bufferedEvents.add(event);
-                });
         List<UpdateEvent<K, V>> processed = new CopyOnWriteArrayList<>();
-        return snapshotEventFlowable
-                // compute snapshot in scheduler thread
+        Flowable<UpdateEvent<K, V>> initialSnapshotFeed = snapshotEventFlowable.take(1)
                 .subscribeOn(scheduler)
-                .take(1)
-                .switchMap(snapshot -> updateEventFlowable.observeOn(scheduler).startWithItem(snapshot))
+                .observeOn(scheduler);
+        Flowable<UpdateEvent<K, V>> eventFeed = updateEventFlowable.observeOn(scheduler);
+        AtomicReference<Map<K, V>> initialRecords = new AtomicReference<>();
+        return Flowable.merge(eventFeed, initialSnapshotFeed)
                 .map(event -> {
-                    if (!bufferedSubscription.isDisposed()) {
-                        List<UpdateEvent<K, V>> delayedUpdates = new ArrayList<>(bufferedEvents.size());
-                        if (event.isSnapshot() && processed.isEmpty()) {
-                            bufferedEvents.drainTo(delayedUpdates);
-                            UpdateEvent<K, V> snapshot = mergeBufferedSnapshotUpdates(event, delayedUpdates);
-                            processed.add(snapshot);
-                            processed.addAll(delayedUpdates);
-                            return snapshot;
+                    Map<K, V> initialSnapshot = initialRecords.get();
+                    if (initialSnapshot == null) {
+                        if (event.isSnapshot()) {
+                            UpdateEvent<K, V> snapshotEvent = mergeBufferedSnapshotUpdates(event, processed);
+                            Map<K, V> records = snapshotEvent.getUpdates().stream()
+                                    .collect(Collectors.toMap(UpdateEventEntry::getRecordKey, UpdateEventEntry::getValue));
+                            log.info("Initial snapshot received {}", event.toShortString());
+                            initialRecords.set(records);
+                            return snapshotEvent;
                         } else {
-                            bufferedSubscription.dispose();
-                            log.info("Dispose buffer subscription");
-                            bufferedEvents.drainTo(delayedUpdates);
-                            if (!processed.contains(event) && !delayedUpdates.contains(event)) {
-                                log.warn("Unexpected event {}. Treat as delayed", event);
-                                delayedUpdates.add(event);
-                            }
-                            int index = delayedUpdates.indexOf(event);
-                            log.info("Current event is [{}] of delayed events [{}]", index, delayedUpdates.size());
-                            UpdateEvent<K, V> merged = mergeBufferedUpdateEvents(processed.get(0), delayedUpdates);
-
-                            // cleanup processed event list
-                            processed.clear();
-                            if (index >= 0 && index < delayedUpdates.size() - 1) {
-                                processed.addAll(delayedUpdates.subList(index + 1, delayedUpdates.size()));
-                            }
-                            return merged;
+                            log.info("Buffer update event {}", event);
+                            processed.add(event);
+                            return UpdateEvent.<K, V>empty();
+                        }
+                    } else {
+                        if (event.isSnapshot()) {
+                            log.info("Initial snapshot cleared {}", event.toShortString());
+                            initialSnapshot.clear();
+                        } else if (isEligibleForCorrection(initialSnapshot, event)) {
+                            return mergeBufferedUpdateEvents(initialSnapshot, Collections.singletonList(event));
                         }
                     }
-                    if (!processed.isEmpty() && processed.remove(event)) {
-                        log.info("Skip processed event {}", event);
-                        // skip processed event
-                        return UpdateEvent.<K, V>empty();
-                    }
+
                     return event;
                 })
                 .doOnError(log::error)
@@ -189,14 +171,33 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
         return new UpdateEvent<>(snapshot.values(), UpdateEvent.Type.SNAPSHOT);
     }
 
+    static <K, V extends BlotterReportRecord<K>>  boolean isEligibleForCorrection(Map<K, V> reported, UpdateEvent<K, V> event){
+        if (reported.isEmpty()) {
+            return false;
+        }
+        return event.getUpdates().stream().anyMatch(entry -> {
+            V reportedValue = reported.get(entry.getRecordKey());
+            long reportedVersion = getRecordVersion(reportedValue);
+            return entry.getVersion() <= reportedVersion || getRecordVersion(entry.getOldValue()) < reportedVersion;
+        });
+    }
+
     static <K, V extends BlotterReportRecord<K>>  UpdateEvent<K, V> mergeBufferedUpdateEvents(
-            UpdateEvent<K, V> snapshot,
+            UpdateEvent<K, V> event,
+            List<UpdateEvent<K, V>> bufferedUpdates) {
+        if (!event.isSnapshot()) {
+            throw new IllegalArgumentException("Snapshot is expected, but received " + event);
+        }
+        Map<K, V> reportedRecords = event.getUpdates().stream()
+                .collect(Collectors.toMap(UpdateEventEntry::getRecordKey, UpdateEventEntry::getValue));
+        return mergeBufferedUpdateEvents(reportedRecords, bufferedUpdates);
+    }
+
+    static <K, V extends BlotterReportRecord<K>>  UpdateEvent<K, V> mergeBufferedUpdateEvents(
+            Map<K, V> reportedRecords,
             List<UpdateEvent<K, V>> bufferedUpdates)
     {
-        log.info("Merge {} buffered update events to {}", bufferedUpdates.size(), snapshot.toShortString());
-        if (!snapshot.isSnapshot()) {
-            throw new IllegalArgumentException("Snapshot event is expected");
-        }
+        log.info("Merge {} buffered update events with {}", bufferedUpdates.size(), reportedRecords.size());
         // check if has further snapshot
         Optional<UpdateEvent<K, V>> nextSnapshot = bufferedUpdates.stream().filter(UpdateEvent::isSnapshot).findFirst();
         if (nextSnapshot.isPresent()) {
@@ -206,8 +207,6 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                     bufferedUpdates.subList(index + 1, bufferedUpdates.size()) : Collections.emptyList();
             return mergeBufferedSnapshotUpdates(nextSnapshot.get(), nextEvents);
         }
-        Map<K, UpdateEventEntry<K, V>> reportedRecords = snapshot.getUpdates().stream()
-                .collect(Collectors.toMap(UpdateEventEntry::getRecordKey, entry -> entry, greaterVersionMerger()));
 
         Map<K, UpdateEventEntry<K, V>> entries = new HashMap<>();
         bufferedUpdates.stream()
@@ -215,7 +214,7 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                 .forEach(entry -> {
                     K key = entry.getRecordKey();
                     UpdateEventEntry<K, V> current = entries.get(key);
-                    V old = reportedRecords.containsKey(key) ? reportedRecords.get(key).getValue() : null;
+                    V old = reportedRecords.get(key);
                     if (entry.getVersion() > UpdateEventEntry.getVersion(current) && entry.getVersion() > getRecordVersion(old)) {
                         log.info("Update from buffer {}: {} -> {}", entry.getRecordKey(), getRecordVersion(old), entry.getVersion());
                         entries.put(key, new UpdateEventEntry<>(entry.getValue(), old));

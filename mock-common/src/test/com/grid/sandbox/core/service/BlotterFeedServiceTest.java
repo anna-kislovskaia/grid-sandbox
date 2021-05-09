@@ -61,8 +61,7 @@ class BlotterFeedServiceTest {
         feedService.update(Collections.singleton(update));
 
         feedService.reset(testTrades);
-        verify(consumer, times(1)).accept(eventCaptor.capture());
-        assertEquals(1, eventCaptor.getAllValues().size());
+        verify(consumer, times(2)).accept(eventCaptor.capture());
         UpdateEvent<String, Trade> event = eventCaptor.getValue();
         assertTrue(event.isSnapshot());
         Trade testTrade = eventCaptor.getValue().getUpdates().stream()
@@ -261,7 +260,7 @@ class BlotterFeedServiceTest {
 
         // close updater and wait for all events
         updateSubscription.dispose();
-        while (lastUpdateTime.get() == 0 || System.currentTimeMillis() - lastUpdateTime.get() < 1000) {
+        while (lastUpdateTime.get() == 0 || System.currentTimeMillis() - lastUpdateTime.get() < 300) {
             Thread.sleep(100);
         }
 
