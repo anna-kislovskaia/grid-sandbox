@@ -15,7 +15,9 @@ import javax.annotation.PostConstruct;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Log4j2
@@ -104,6 +106,7 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                 .onBackpressureBuffer(updateEventBufferSize)
                 .observeOn(scheduler);
         AtomicReference<Map<K, V>> initialRecords = new AtomicReference<>();
+        AtomicLong maxInitialVersion = new AtomicLong(-1);
         return Flowable.merge(eventFeed, initialSnapshotFeed)
                 .map(event -> {
                     Map<K, V> initialSnapshot = initialRecords.get();
@@ -112,7 +115,8 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                             UpdateEvent<K, V> snapshotEvent = mergeBufferedSnapshotUpdates(event, processed);
                             Map<K, V> records = snapshotEvent.getUpdates().stream()
                                     .collect(Collectors.toMap(UpdateEventEntry::getRecordKey, UpdateEventEntry::getValue));
-                            log.info("Initial snapshot received {}", event.toShortString());
+                            maxInitialVersion.set(getMaxVersion(snapshotEvent, entry -> entry.getVersion()));
+                            log.info("Initial snapshot received {}. Max version {}", event.toShortString(), maxInitialVersion.get());
                             initialRecords.set(records);
                             return snapshotEvent;
                         } else {
@@ -120,9 +124,10 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                             processed.add(event);
                             return UpdateEvent.<K, V>empty();
                         }
-                    } else {
-                        if (event.isSnapshot()) {
+                    } else if(!initialSnapshot.isEmpty()) {
+                        if (shallCleanInitialSnapshot(event, maxInitialVersion.get())) {
                             log.info("Initial snapshot cleared {}", event.toShortString());
+                            maxInitialVersion.set(0);
                             initialSnapshot.clear();
                         } else if (isEligibleForCorrection(initialSnapshot, event)) {
                             return mergeBufferedUpdateEvents(initialSnapshot, Collections.singletonList(event));
@@ -144,6 +149,19 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
         return new UpdateEvent<>(eventSnapshot, UpdateEvent.Type.SNAPSHOT);
     }
 
+    private static <K, V extends BlotterReportRecord<K>> boolean shallCleanInitialSnapshot(UpdateEvent<K, V> event, long maxVersion) {
+        return maxVersion == 0 ||
+                event.isSnapshot() ||
+                getMaxVersion(event, entry -> getRecordVersion(entry.getOldValue())) > maxVersion;
+    }
+
+    private static <K, V extends BlotterReportRecord<K>> long getMaxVersion(
+            UpdateEvent<K, V> event,
+            Function<UpdateEventEntry<K, V>, Long> mapper)
+    {
+        return event.getUpdates().stream().mapToLong(mapper::apply).max().orElse(0);
+    }
+
     private static  <K, V extends BlotterReportRecord<K>> UpdateEvent<K, V> mergeBufferedSnapshotUpdates(
             UpdateEvent<K, V> original,
             List<UpdateEvent<K, V>> bufferedUpdates)
@@ -160,7 +178,7 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                     UpdateEventEntry<K, V> current = snapshot.get(entry.getRecordKey());
                     long currentVersion = UpdateEventEntry.getVersion(current);
                     if (currentVersion < entry.getVersion()) {
-                        log.info("Update snapshot from buffer {}: {} -> {}", entry.getRecordKey(), currentVersion, entry.getVersion());
+                        log.info("Update snapshot from buffer id={}: {} -> {}", entry.getRecordKey(), currentVersion, entry.getVersion());
                         snapshot.put(entry.getRecordKey(), UpdateEventEntry.addedValue(entry.getValue()));
                     }
                 });
