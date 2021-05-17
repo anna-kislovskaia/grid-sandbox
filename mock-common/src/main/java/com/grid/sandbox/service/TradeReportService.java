@@ -11,6 +11,7 @@ import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.utils.*;
 import io.reactivex.Flowable;
 import io.reactivex.Scheduler;
+import io.reactivex.schedulers.Schedulers;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,7 +39,7 @@ public class TradeReportService {
         log.info("{} Subscription requested", feedId);
         Scheduler scheduler = subscription.getScheduler();
         FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
-                tradeFeedService.getTradeFeed(scheduler),
+                tradeFeedService.getTradeFeed(Schedulers.computation()),
                 tradeFeedService.getTradeSnapshotFeed(),
                 CacheUtils.getTradeFilterOptionBuilder(),
                 reportFilter
@@ -58,7 +59,7 @@ public class TradeReportService {
                 });
 
         return Flowable.combineLatest(
-                filterOptionService.getFilterOptions(),
+                filterOptionService.getFilterOptions().observeOn(scheduler),
                 valueFeed,
                 (filters, pageUpdate) -> pageUpdate.toBuilder()
                         .filterOptions(filters)
