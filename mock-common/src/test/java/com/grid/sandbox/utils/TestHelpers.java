@@ -7,10 +7,13 @@ import io.reactivex.Scheduler;
 import io.reactivex.schedulers.Schedulers;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TestHelpers {
 
@@ -42,4 +45,28 @@ public class TestHelpers {
         testTrades.add(new Trade("15", BigDecimal.valueOf(900), "client 1", System.currentTimeMillis(), TradeStatus.PLACED));
         return testTrades;
     }
+
+    private static String[] CLIENTS = new String[]{"client 1", "client 2", "client 3", "client 4"};
+    private static Random random = new Random();
+    private static AtomicInteger idGenerator = new AtomicInteger();
+
+    public static Trade generateNewTrade() {
+        Trade.Builder builder = Trade.builder()
+                .tradeId("trade-" + idGenerator.incrementAndGet())
+                .client(getRandomValue(CLIENTS, random.nextInt()));
+        return updateTrade(builder);
+    }
+
+    public static Trade updateTrade(Trade.Builder builder) {
+        return builder
+                .status(getRandomValue(TradeStatus.values(), random.nextInt()))
+                .lastUpdateTimestamp(System.currentTimeMillis())
+                .balance(BigDecimal.valueOf(random.nextDouble() * 10000).setScale(2, RoundingMode.HALF_UP))
+                .build();
+    }
+
+    private static <T> T getRandomValue(T[] array, int index) {
+        return array[Math.abs(index) % array.length];
+    }
+
 }
