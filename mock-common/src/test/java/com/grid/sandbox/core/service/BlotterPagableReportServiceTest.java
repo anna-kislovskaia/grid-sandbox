@@ -1,5 +1,6 @@
 package com.grid.sandbox.core.service;
 
+import com.grid.sandbox.core.model.BlotterViewport;
 import com.grid.sandbox.core.model.PageUpdate;
 import com.grid.sandbox.core.model.UpdateEvent;
 import com.grid.sandbox.core.model.UpdateEventEntry;
@@ -14,8 +15,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -29,8 +28,8 @@ import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class BlotterPagableReportServiceTest {
-    private final Pageable request = PageRequest.of(1, 4);
-    private final BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>();
+    private final BlotterViewport viewport = new BlotterViewport(1, 4);
+    private final Flowable<BlotterViewport> request = Flowable.just(viewport);
 
     private List<Trade> testTrades;
     private Map<String, UpdateEventEntry<String, Trade>> snapshot;
@@ -51,13 +50,14 @@ class BlotterPagableReportServiceTest {
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
                 new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT)
         );
-        blotterReportService.getReport(feed, request, ACCEPT_ALL, ID_COMPARATOR).subscribe(consumer);
+        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(ACCEPT_ALL, ID_COMPARATOR);
+        blotterReportService.getReport(feed, request).subscribe(consumer);
 
         verify(consumer, times(1)).accept(pageUpdateCaptor.capture());
         PageUpdate<Trade> snapshotUpdate = pageUpdateCaptor.getValue();
         assertTrue(snapshotUpdate.isSnapshot());
         assertEquals(snapshotUpdate.getTotalSize(), testTrades.size());
-        assertEquals(snapshotUpdate.getUpdated().size(), request.getPageSize());
+        assertEquals(snapshotUpdate.getUpdated().size(), viewport.getPageSize());
         assertTrue(snapshotUpdate.getDeleted().isEmpty());
         String[] expected = new String[]{"13", "14", "15", "2"};
         assertArrayEquals(expected, snapshotUpdate.getUpdated().stream().map(Trade::getTradeId).toArray());
@@ -72,7 +72,8 @@ class BlotterPagableReportServiceTest {
                 Comparator.comparing(Trade::getClient),
                 Comparator.comparing(Trade::getBalance),
                 ID_COMPARATOR));
-        blotterReportService.getReport(feed, request, ACCEPT_ALL, comparator).subscribe(consumer);
+        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(ACCEPT_ALL, comparator);
+        blotterReportService.getReport(feed, request).subscribe(consumer);
 
         verify(consumer, times(1)).accept(pageUpdateCaptor.capture());
         List<PageUpdate<Trade>> updates = pageUpdateCaptor.getAllValues();
@@ -98,7 +99,8 @@ class BlotterPagableReportServiceTest {
                 Comparator.comparing(Trade::getClient),
                 Comparator.comparing(Trade::getBalance),
                 ID_COMPARATOR));
-        blotterReportService.getReport(feed, request, ACCEPT_ALL, comparator).subscribe(consumer);
+        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(ACCEPT_ALL, comparator);
+        blotterReportService.getReport(feed, request).subscribe(consumer);
 
         verify(consumer, times(2)).accept(pageUpdateCaptor.capture());
         List<PageUpdate<Trade>> updates = pageUpdateCaptor.getAllValues();
@@ -119,23 +121,33 @@ class BlotterPagableReportServiceTest {
     @Test
     void testRemoveByFilter() throws Throwable {
         // client 1 trade out of page 1
-        Trade trade5 = snapshot.get("5").getValue();
+        Trade trade5 = getTrade("5");
         // client 2 trade within page 1
-        Trade trade4 = snapshot.get("4").getValue();
+        Trade trade4 = getTrade("4");
+        Trade trade12 = getTrade("12");
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
                 new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT),
                 new UpdateEvent<>(Arrays.asList(
                         createEventEntry(setStatus(trade5, TradeStatus.CANCELLED), trade5),
                         createEventEntry(setStatus(trade4, TradeStatus.CANCELLED), trade4)
+                ), UpdateEvent.Type.INCREMENTAL),
+                new UpdateEvent<>(Collections.singletonList(
+                        createEventEntry(setStatus(trade12, TradeStatus.CANCELLED), trade12)
                 ), UpdateEvent.Type.INCREMENTAL)
         );
         Comparator<Trade> comparator = new MultiComparator<>(Arrays.asList(
                 Comparator.comparing(Trade::getClient),
                 Comparator.comparing(Trade::getBalance),
                 ID_COMPARATOR));
-        blotterReportService.getReport(feed, request, ACCEPT_OPENED, comparator).subscribe(consumer);
+        // initial state by comparator
+        // client 1: 5, 11, 1, 2, 14, 15
+        // client 2: 4, 3, 12
+        // client 3: 9, 13
+        // client 4: 6, 7, 10
+        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(ACCEPT_OPENED, comparator);
+        blotterReportService.getReport(feed, request).subscribe(consumer);
 
-        verify(consumer, times(2)).accept(pageUpdateCaptor.capture());
+        verify(consumer, times(3)).accept(pageUpdateCaptor.capture());
         List<PageUpdate<Trade>> events = pageUpdateCaptor.getAllValues();
         PageUpdate<Trade> snapshotUpdate = events.get(0);
         assertTrue(snapshotUpdate.isSnapshot());
@@ -145,13 +157,28 @@ class BlotterPagableReportServiceTest {
         String[] expected = new String[]{ /*client 1*/ "2", "14", "15", /*client 2*/ "4" };
         assertArrayEquals(expected, snapshotUpdate.getUpdated().stream().map(Trade::getTradeId).toArray());
 
-        PageUpdate<Trade> incrementalUpdate = events.get(1);
-        assertFalse(incrementalUpdate.isSnapshot());
-        assertEquals(testTrades.size() - 2, incrementalUpdate.getTotalSize());
+        // 2 new rows + 2 deleted rows for 4 page size -> page snapshot returned
+        PageUpdate<Trade> resetUpdate = events.get(1);
+        assertTrue(resetUpdate.isSnapshot());
+        assertEquals(testTrades.size() - 2, resetUpdate.getTotalSize());
 
         // after  trade cancel expected page state
         // String[] expected = new String[]{ /*client 1*/ "14", "15", /*client 2*/ "3", "12" };
-        assertArrayEquals(new Trade[]{snapshot.get("2").getValue(), trade4}, incrementalUpdate.getDeleted().toArray());
-        assertArrayEquals(new Trade[]{snapshot.get("3").getValue(), snapshot.get("12").getValue()}, incrementalUpdate.getUpdated().toArray());
+        assertTrue(resetUpdate.getDeleted().isEmpty());
+        assertArrayEquals(new Trade[]{getTrade("14"), getTrade("15"), getTrade("3"), getTrade("12")}, resetUpdate.getUpdated().toArray());
+
+        // 1 new rows + 1 deleted rows for 4 page size -> page incremental returned
+        PageUpdate<Trade> incrementalUpdate = events.get(2);
+        assertFalse(incrementalUpdate.isSnapshot());
+        assertEquals(testTrades.size() - 3, incrementalUpdate.getTotalSize());
+
+        // after  trade cancel expected page state
+        // String[] expected = new String[]{ /*client 1*/ "14", "15", /*client 2*/ "3", "9" };
+        assertArrayEquals(new Trade[]{trade12}, incrementalUpdate.getDeleted().toArray());
+        assertArrayEquals(new Trade[]{getTrade("9")}, incrementalUpdate.getUpdated().toArray());
+    }
+
+    private Trade getTrade(String tradeId) {
+        return snapshot.get(tradeId).getValue();
     }
 }

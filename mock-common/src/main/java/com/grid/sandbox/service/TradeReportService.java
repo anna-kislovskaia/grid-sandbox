@@ -12,16 +12,16 @@ import com.grid.sandbox.utils.*;
 import io.reactivex.Flowable;
 import io.reactivex.Scheduler;
 import io.reactivex.schedulers.Schedulers;
-import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+import static com.grid.sandbox.utils.CacheUtils.*;
 
 @Service
 @Log4j2
@@ -34,7 +34,7 @@ public class TradeReportService {
     private ComparatorsService comparatorsService;
 
 
-    public Flowable<PageUpdate<Trade>> getTrades(ReportSubscription<Trade> subscription, Predicate<Trade> reportFilter) {
+    public Flowable<PageUpdate<Trade>> getTrades(ReportSubscription subscription, Predicate<Trade> reportFilter) {
         String feedId = "tradeFeed-" + subscription.getSubscriptionId();
         log.info("{} Subscription requested", feedId);
         Scheduler scheduler = subscription.getScheduler();
@@ -45,17 +45,15 @@ public class TradeReportService {
                 reportFilter
         );
 
-        Flowable<Predicate<Trade>> compositeFilterFeed = subscription.getUserFilterFeed().map(userFilter ->
-                userFilter == null ? reportFilter : new MultiPredicate<>(Arrays.asList(reportFilter, userFilter))
-        );
-        Flowable<PageUpdate<Trade>> valueFeed = Flowable
-                .combineLatest(subscription.getRequestFeed(), compositeFilterFeed, RequestParams::new)
-                .throttleLast(1000, TimeUnit.MILLISECONDS)
+        Flowable<PageUpdate<Trade>> valueFeed = subscription.getUserSettingsFeed()
                 .switchMap(params -> {
-                    Comparator<Trade> comparator = getTradeComparatorBySort(params.request.getSort());
+                    Comparator<Trade> comparator = getTradeComparatorBySort(params.getSort());
+                    Predicate<Trade> userFilter = parseOptionFilter(params.getFilterString());
+                    Predicate<Trade> filter = userFilter == null ? reportFilter :
+                            new MultiPredicate<>(Arrays.asList(reportFilter, userFilter));
                     Flowable<UpdateEvent<String, Trade>> tradeFeed = tradeFeedService.getTradeFeed(scheduler);
-                    BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>();
-                    return blotterReportService.getReport(tradeFeed, params.request, params.filter, comparator);
+                    BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(filter, comparator);
+                    return blotterReportService.getReport(tradeFeed, subscription.getViewportFeed());
                 });
 
         return Flowable.combineLatest(
@@ -87,10 +85,26 @@ public class TradeReportService {
         return new MultiComparator<>(comparators);
     }
 
-    @AllArgsConstructor
-    private static class RequestParams {
-        private Pageable request;
-        private Predicate<Trade> filter;
+    private static Predicate<Trade> parseOptionFilter(String filterStr) {
+        if (filterStr == null || filterStr.trim().isEmpty()) {
+            return ACCEPT_ALL;
+        }
+        log.info("Parsing option filters [{}]", filterStr);
+        List<Predicate<Trade>> filters = Arrays.stream(filterStr.split(";")).map(filter -> {
+            log.info("Parsing filter {}", filter);
+            String[] parts = filter.split("=");
+            String field = parts[0];
+            Set<String> values = new HashSet<>(Arrays.asList(parts[1].split(",")));
+            if (!values.isEmpty()) {
+                if ("client".equals(field))
+                    return getTradePredicate(TRADE_CLIENT_MAPPER, values);
+                else if ("status".equals(field)) {
+                    return getTradePredicate(TRADE_STATUS_MAPPER, values);
+                }
+            }
+            throw new IllegalArgumentException("Invalid format: " + filter);
+        }).collect(Collectors.toList());
+        return filters.size() == 1 ? filters.get(0) : new MultiPredicate<>(filters);
     }
 
 }

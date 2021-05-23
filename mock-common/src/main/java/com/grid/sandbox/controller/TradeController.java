@@ -1,11 +1,12 @@
 package com.grid.sandbox.controller;
 
+import com.grid.sandbox.core.model.BlotterViewport;
 import com.grid.sandbox.core.model.PageUpdate;
+import com.grid.sandbox.core.model.UserBlotterSettings;
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.core.service.KeyOrderedSchedulerService;
 import com.grid.sandbox.core.utils.ReportSubscription;
 import com.grid.sandbox.service.TradeReportService;
-import com.grid.sandbox.core.utils.MultiPredicate;
 import io.reactivex.Flowable;
 import io.reactivex.Scheduler;
 import lombok.extern.log4j.Log4j2;
@@ -38,7 +39,7 @@ import static com.grid.sandbox.utils.CacheUtils.*;
 @RequestMapping("/trades")
 public class TradeController {
     private final AtomicInteger subscriptionIdGenerator = new AtomicInteger();
-    private final ConcurrentMap<Integer, ReportSubscription<Trade>> subscriptions = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Integer, ReportSubscription> subscriptions = new ConcurrentHashMap<>();
 
     @Autowired
     private TradeReportService tradeReportService;
@@ -52,7 +53,7 @@ public class TradeController {
                                                  @RequestParam Optional<List<String>> sort)
     {
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
-        ReportSubscription<Trade> subscription = createSubscription(request);
+        ReportSubscription subscription = createSubscription(request);
         return toFlux(tradeReportService.getTrades(subscription, ACCEPT_OPENED), subscription);
     }
 
@@ -63,11 +64,11 @@ public class TradeController {
                                                  @RequestParam Optional<List<String>> sort)
     {
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
-        ReportSubscription<Trade> subscription = createSubscription(request);
+        ReportSubscription subscription = createSubscription(request);
         return toFlux(tradeReportService.getTrades(subscription, ACCEPT_ALL), subscription);
     }
 
-    private <T> Flux<T> toFlux(Flowable<T> feed, ReportSubscription<?> subscription) {
+    private <T> Flux<T> toFlux(Flowable<T> feed, ReportSubscription subscription) {
         Subscription[] subscriptionHandler = new Subscription[1];
         Flowable<T> cancellableFeed = feed.doOnSubscribe(feedSubscription -> subscriptionHandler[0] = feedSubscription);
         return Flux.from(cancellableFeed)
@@ -86,29 +87,28 @@ public class TradeController {
                                              @RequestParam Optional<String> filter) {
 
         Pageable request = getPagebleRequest(page, size, parseSort(sort));
-        Optional<Predicate<Trade>> userFilter = filter.map(TradeController::parseOptionFilter);
-        ReportSubscription<Trade> subscription = subscriptions.get(subscriptionId);
+        ReportSubscription subscription = subscriptions.get(subscriptionId);
         if (subscription != null) {
-            subscription.getPageableSubject().onNext(request);
-            userFilter.ifPresent(tradePredicate -> subscription.getUserFilterSubject().onNext(tradePredicate));
+            subscription.getViewportSubject().onNext(convertToBlotterViewport(request));
+            subscription.getSettingsSubject().onNext(new UserBlotterSettings(request.getSort(), filter.orElse(null)));
         } else {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok().build();
     }
 
-    private ReportSubscription<Trade> createSubscription(Pageable request) {
-        ReportSubscription<Trade> subscription = new ReportSubscription<>(
+    private ReportSubscription createSubscription(Pageable request) {
+        ReportSubscription subscription = new ReportSubscription(
                 subscriptionIdGenerator.incrementAndGet(),
-                request,
-                ACCEPT_ALL,
+                convertToBlotterViewport(request),
+                request.getSort(),
                 getSessionScheduler());
         subscriptions.put(subscription.getSubscriptionId(), subscription);
         return subscription;
     }
 
     private void closeSubscription(int subscriptionId) {
-        ReportSubscription<Trade> subscription = subscriptions.remove(subscriptionId);
+        ReportSubscription subscription = subscriptions.remove(subscriptionId);
         log.info("Subscription {} {}", subscriptionId, subscription != null ? "closed" : " not found");
     }
 
@@ -120,26 +120,8 @@ public class TradeController {
         }
     }
 
-    private static Predicate<Trade> parseOptionFilter(String filterStr) {
-        if (filterStr.trim().isEmpty()) {
-            return ACCEPT_ALL;
-        }
-        log.info("Parsing option filters [{}]", filterStr);
-        List<Predicate<Trade>> filters = Arrays.stream(filterStr.split(";")).map(filter -> {
-            log.info("Parsing filter {}", filter);
-            String[] parts = filter.split("=");
-            String field = parts[0];
-            Set<String> values = new HashSet<>(Arrays.asList(parts[1].split(",")));
-            if (!values.isEmpty()) {
-                if ("client".equals(field))
-                    return getTradePredicate(TRADE_CLIENT_MAPPER, values);
-                else if ("status".equals(field)) {
-                    return getTradePredicate(TRADE_STATUS_MAPPER, values);
-                }
-            }
-            throw new IllegalArgumentException("Invalid format: " + filter);
-        }).collect(Collectors.toList());
-        return filters.size() == 1 ? filters.get(0) : new MultiPredicate<>(filters);
+    private static BlotterViewport convertToBlotterViewport(Pageable pageable) {
+        return pageable.isPaged() ? new BlotterViewport(pageable.getPageNumber(), pageable.getPageSize()) : BlotterViewport.UNPAGED;
     }
 
     private static Sort parseSort(Optional<List<String>> sortSettings) {

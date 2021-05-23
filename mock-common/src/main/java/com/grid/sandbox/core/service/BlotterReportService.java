@@ -1,14 +1,10 @@
 package com.grid.sandbox.core.service;
 
-import com.grid.sandbox.core.model.BlotterReportRecord;
-import com.grid.sandbox.core.model.PageUpdate;
-import com.grid.sandbox.core.model.UpdateEvent;
-import com.grid.sandbox.core.model.UpdateEventEntry;
+import com.grid.sandbox.core.model.*;
 import com.grid.sandbox.core.utils.RedBlackBST;
 import io.reactivex.Flowable;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
-import org.springframework.data.domain.Pageable;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -18,21 +14,31 @@ import java.util.stream.Collectors;
 @Log4j2
 @AllArgsConstructor
 public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
+    private final Predicate<V> filter;
+    private final Comparator<V> comparator;
 
-    public Flowable<PageUpdate<V>> getReport(Flowable<UpdateEvent<K, V>> feed, Pageable request, Predicate<V> filter, Comparator<V> comparator) {
+    public Flowable<PageUpdate<V>> getReport(Flowable<UpdateEvent<K, V>> dataFeed, Flowable<BlotterViewport> viewportFeed) {
         final RedBlackBST<V, V> sortedValue = new RedBlackBST<>(comparator);
         final AtomicReference<Map<K, V>> page = new AtomicReference<>(new HashMap<>());
-        return feed
-                .map(updateEvent -> {
-                    Map<K, V> changed = handleValueUpdates(updateEvent, filter, sortedValue);
-                    boolean snapshot = updateEvent.getType() == UpdateEvent.Type.SNAPSHOT;
+        final AtomicReference<UpdateEvent<K, V>> appliedEvent = new AtomicReference<>();
+        return Flowable.combineLatest(viewportFeed, dataFeed,
+                (viewport, updateEvent) -> {
+                    UpdateEvent oldEvent = appliedEvent.getAndSet(updateEvent);
+                    Map<K, V> changed = Collections.emptyMap();
+                    boolean snapshot = false;
+                    // skip tree updates on viewport change
+                    if (oldEvent != updateEvent) {
+                        changed = handleValueUpdates(updateEvent, filter, sortedValue);
+                        snapshot = updateEvent.getType() == UpdateEvent.Type.SNAPSHOT;
+                    }
+
                     PageUpdate.Builder<V> builder = PageUpdate.<V>builder()
                             .totalSize(sortedValue.size())
-                            .pageSize(request.getPageSize())
-                            .pageNumber(request.getPageNumber());
+                            .pageSize(viewport.getPageSize())
+                            .pageNumber(viewport.getPageNumber());
 
-                    if (request.isPaged()) {
-                        handlePagedUpdate(request, page, builder, snapshot, changed, sortedValue);
+                    if (viewport.isPaged()) {
+                        handlePagedUpdate(viewport, page, builder, snapshot, changed, sortedValue);
                     } else {
                         handleUnpagedUpdate(builder, snapshot, changed, sortedValue);
                     }
@@ -41,22 +47,22 @@ public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
                 .filter(update -> !update.isEmpty() || update.isSnapshot());
     }
 
-    private void handlePagedUpdate(Pageable request,
+    private void handlePagedUpdate(BlotterViewport viewport,
                                    AtomicReference<Map<K, V>> page,
                                    PageUpdate.Builder<V> builder,
                                    boolean snapshot,
                                    Map<K, V> changed,
                                    RedBlackBST<V, V> sortedValues) {
 
-        if (request.getOffset() >= sortedValues.size()) {
+        if (viewport.getOffset() >= sortedValues.size()) {
             Map<K, V> old = page.getAndSet(Collections.emptyMap());
             builder.updated(Collections.emptyList())
                     .deleted(new ArrayList<>(old.values()));
             return;
         }
 
-        long minRank = request.getOffset();
-        long maxRank = minRank + request.getPageSize() - 1;
+        long minRank = viewport.getOffset();
+        long maxRank = minRank + viewport.getPageSize() - 1;
 
         V min = sortedValues.select((int) minRank);
         V max = maxRank >= sortedValues.size() ? sortedValues.max() : sortedValues.select((int) maxRank);
@@ -79,7 +85,12 @@ public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
                     })
                     .collect(Collectors.toList());
             old.keySet().removeAll(current.keySet());
-            builder.updated(updated).deleted(new ArrayList<>(old.values()));
+            if (updated.size() + old.size() < viewport.getPageSize()) {
+                builder.updated(updated).deleted(new ArrayList<>(old.values()));
+            } else {
+                // report as snapshot change
+                builder.updated(new ArrayList<>(current.values())).deleted(Collections.emptyList()).snapshot(true);
+            }
         }
     }
 

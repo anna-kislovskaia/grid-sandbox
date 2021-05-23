@@ -1,33 +1,33 @@
 package com.grid.sandbox.core.utils;
 
+import com.grid.sandbox.core.model.BlotterViewport;
+import com.grid.sandbox.core.model.UserBlotterSettings;
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
 import io.reactivex.Scheduler;
 import io.reactivex.subjects.BehaviorSubject;
 import lombok.Getter;
-import org.springframework.data.domain.Pageable;
-
-import java.util.function.Predicate;
+import org.springframework.data.domain.Sort;
 
 @Getter
-public class ReportSubscription<T> {
+public class ReportSubscription {
     private final int subscriptionId;
     private final Scheduler scheduler;
-    private final BehaviorSubject<Pageable> pageableSubject = BehaviorSubject.create();
-    private final BehaviorSubject<Predicate<T>> userFilterSubject = BehaviorSubject.create();
+    private final BehaviorSubject<BlotterViewport> viewportSubject = BehaviorSubject.create();
+    private final BehaviorSubject<UserBlotterSettings> settingsSubject = BehaviorSubject.create();
 
-    public ReportSubscription(int subscriptionId, Pageable request, Predicate<T> initial, Scheduler scheduler) {
+    public ReportSubscription(int subscriptionId, BlotterViewport viewport, Sort initial, Scheduler scheduler) {
         this.subscriptionId = subscriptionId;
         this.scheduler = scheduler;
-        pageableSubject.onNext(request);
-        userFilterSubject.onNext(initial);
+        viewportSubject.onNext(viewport);
+        settingsSubject.onNext(new UserBlotterSettings(initial, ""));
     }
 
-    public Flowable<Pageable> getRequestFeed() {
-        return pageableSubject.toFlowable(BackpressureStrategy.LATEST);
+    public Flowable<BlotterViewport> getViewportFeed() {
+        return viewportSubject.toFlowable(BackpressureStrategy.LATEST).distinctUntilChanged();
     }
 
-    public Flowable<Predicate<T>> getUserFilterFeed() {
-        return userFilterSubject.toFlowable(BackpressureStrategy.LATEST);
+    public Flowable<UserBlotterSettings> getUserSettingsFeed() {
+        return settingsSubject.toFlowable(BackpressureStrategy.LATEST).distinctUntilChanged();
     }
 }

@@ -1,6 +1,6 @@
 package com.grid.sandbox.core.service;
 
-import com.grid.sandbox.controller.UnpagedRequest;
+import com.grid.sandbox.core.model.BlotterViewport;
 import com.grid.sandbox.core.model.PageUpdate;
 import com.grid.sandbox.core.model.UpdateEvent;
 import com.grid.sandbox.core.model.UpdateEventEntry;
@@ -15,7 +15,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Pageable;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -28,8 +27,7 @@ import java.util.stream.Collectors;
 
 @ExtendWith(MockitoExtension.class)
 class BlotterUnpagableReportServiceTest {
-    private final Pageable request = new UnpagedRequest();
-    private final BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>();
+    private final Flowable<BlotterViewport> request = Flowable.just(BlotterViewport.UNPAGED);
     private List<Trade> testTrades ;
     private Map<String, UpdateEventEntry<String, Trade>> snapshot;
     @Mock
@@ -49,7 +47,8 @@ class BlotterUnpagableReportServiceTest {
         Flowable<UpdateEvent<String, Trade>> feed = Flowable.just(
                 new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT)
         );
-        blotterReportService.getReport(feed, request, ACCEPT_ALL, ID_COMPARATOR).subscribe(consumer);
+        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(ACCEPT_ALL, ID_COMPARATOR);
+        blotterReportService.getReport(feed, request).subscribe(consumer);
 
 
         verify(consumer, times(1)).accept(pageUpdateCaptor.capture());
@@ -68,7 +67,8 @@ class BlotterUnpagableReportServiceTest {
                 Comparator.comparing(Trade::getClient),
                 Comparator.comparing(Trade::getBalance),
                 ID_COMPARATOR));
-        blotterReportService.getReport(feed, new UnpagedRequest(), ACCEPT_ALL, comparator).subscribe(consumer);
+        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(ACCEPT_ALL, comparator);
+        blotterReportService.getReport(feed, request).subscribe(consumer);
 
         verify(consumer, times(1)).accept(pageUpdateCaptor.capture());
         List<PageUpdate<Trade>> updates = pageUpdateCaptor.getAllValues();
@@ -97,7 +97,8 @@ class BlotterUnpagableReportServiceTest {
                 Comparator.comparing(Trade::getClient),
                 Comparator.comparing(Trade::getBalance),
                 ID_COMPARATOR));
-        blotterReportService.getReport(feed, request, ACCEPT_ALL, comparator).subscribe(consumer);
+        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(ACCEPT_ALL, comparator);
+        blotterReportService.getReport(feed, request).subscribe(consumer);
 
         verify(consumer, times(2)).accept(pageUpdateCaptor.capture());
         List<PageUpdate<Trade>> updates = pageUpdateCaptor.getAllValues();
@@ -122,7 +123,8 @@ class BlotterUnpagableReportServiceTest {
                 Comparator.comparing(Trade::getClient),
                 Comparator.comparing(Trade::getBalance),
                 ID_COMPARATOR));
-        blotterReportService.getReport(feed, request, ACCEPT_OPENED, comparator).subscribe(consumer);
+        BlotterReportService<String, Trade> blotterReportService = new BlotterReportService<>(ACCEPT_OPENED, comparator);
+        blotterReportService.getReport(feed, request).subscribe(consumer);
 
         verify(consumer, times(2)).accept(pageUpdateCaptor.capture());
         List<PageUpdate<Trade>> updates = pageUpdateCaptor.getAllValues();
