@@ -4,6 +4,7 @@ import com.grid.sandbox.core.model.*;
 import com.grid.sandbox.core.utils.RedBlackBST;
 import io.reactivex.Flowable;
 import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.extern.log4j.Log4j2;
 
 import java.util.*;
@@ -20,25 +21,32 @@ public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
     public Flowable<PageUpdate<V>> getReport(Flowable<UpdateEvent<K, V>> dataFeed, Flowable<BlotterViewport> viewportFeed) {
         final RedBlackBST<V, V> sortedValue = new RedBlackBST<>(comparator);
         final AtomicReference<Map<K, V>> page = new AtomicReference<>(new HashMap<>());
-        final AtomicReference<UpdateEvent<K, V>> appliedEvent = new AtomicReference<>();
-        return Flowable.combineLatest(viewportFeed, dataFeed,
-                (viewport, updateEvent) -> {
-                    UpdateEvent oldEvent = appliedEvent.getAndSet(updateEvent);
+
+        return Flowable.merge(
+                dataFeed.map(event -> new ContentUpdateEvent<>(viewportFeed.blockingFirst(), event)),
+                viewportFeed.map(viewport -> new ContentUpdateEvent<K, V>(viewport, null)))
+                .map(event -> {
                     Map<K, V> changed = Collections.emptyMap();
                     boolean snapshot = false;
                     // skip tree updates on viewport change
-                    if (oldEvent != updateEvent) {
-                        changed = handleValueUpdates(updateEvent, filter, sortedValue);
-                        snapshot = updateEvent.getType() == UpdateEvent.Type.SNAPSHOT;
+                    if (event.updateEvent != null) {
+                        int size = sortedValue.size();
+                        snapshot = event.updateEvent.getType() == UpdateEvent.Type.SNAPSHOT;
+                        changed = handleValueUpdates(event.updateEvent, filter, sortedValue);
+                        if (size != sortedValue.size() || snapshot) {
+                            // force page recalculation on size change
+                            page.set(new HashMap<>());
+                        }
                     }
 
+                    BlotterViewport viewport = event.viewport;
                     PageUpdate.Builder<V> builder = PageUpdate.<V>builder()
                             .totalSize(sortedValue.size())
                             .pageSize(viewport.getPageSize())
                             .pageNumber(viewport.getPageNumber());
 
                     if (viewport.isPaged()) {
-                        handlePagedUpdate(viewport, page, builder, snapshot, changed, sortedValue);
+                        handlePagedUpdate(viewport, page, builder, changed, sortedValue);
                     } else {
                         handleUnpagedUpdate(builder, snapshot, changed, sortedValue);
                     }
@@ -50,7 +58,6 @@ public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
     private void handlePagedUpdate(BlotterViewport viewport,
                                    AtomicReference<Map<K, V>> page,
                                    PageUpdate.Builder<V> builder,
-                                   boolean snapshot,
                                    Map<K, V> changed,
                                    RedBlackBST<V, V> sortedValues) {
 
@@ -73,7 +80,7 @@ public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
         }
 
         Map<K, V> old = page.getAndSet(current);
-        if (old.isEmpty() || snapshot) {
+        if (old.isEmpty()) {
             builder.snapshot(true)
                     .updated(new ArrayList<>(current.values()))
                     .deleted(Collections.emptyList());
@@ -141,5 +148,11 @@ public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
         return updated;
     }
 
-
+    @Data
+    @AllArgsConstructor
+    private static class ContentUpdateEvent<K, V extends BlotterReportRecord<K>> {
+        private BlotterViewport viewport;
+        private UpdateEvent<K, V> updateEvent;
+    }
 }
+

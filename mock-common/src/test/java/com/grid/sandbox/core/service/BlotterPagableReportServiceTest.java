@@ -168,14 +168,15 @@ class BlotterPagableReportServiceTest {
         assertArrayEquals(new Trade[]{getTrade("14"), getTrade("15"), getTrade("3"), getTrade("12")}, resetUpdate.getUpdated().toArray());
 
         // 1 new rows + 1 deleted rows for 4 page size -> page incremental returned
+        // size changed snapshot returned
         PageUpdate<Trade> incrementalUpdate = events.get(2);
-        assertFalse(incrementalUpdate.isSnapshot());
+        assertTrue(incrementalUpdate.isSnapshot());
         assertEquals(testTrades.size() - 3, incrementalUpdate.getTotalSize());
 
         // after  trade cancel expected page state
         // String[] expected = new String[]{ /*client 1*/ "14", "15", /*client 2*/ "3", "9" };
-        assertArrayEquals(new Trade[]{trade12}, incrementalUpdate.getDeleted().toArray());
-        assertArrayEquals(new Trade[]{getTrade("9")}, incrementalUpdate.getUpdated().toArray());
+        assertTrue(incrementalUpdate.getDeleted().isEmpty());
+        assertArrayEquals(new Trade[]{getTrade("14"), getTrade("15"), getTrade("3"),getTrade("9")}, incrementalUpdate.getUpdated().toArray());
     }
 
     private Trade getTrade(String tradeId) {
