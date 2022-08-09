@@ -1,0 +1,7 @@
+spring:
+logging:
+  pattern:
+    console: "%d %-5level [%thread] %logger{32} : %msg%n"
+  level:
+    org.springframework: INFO
+    com.grid.sandbox: INFO

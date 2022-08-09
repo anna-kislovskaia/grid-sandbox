@@ -39,49 +39,50 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.springframework</groupId>
-			<artifactId>spring-beans</artifactId>
-			<version>${spring.version}</version>
-		</dependency>
-
-		<dependency>
-			<groupId>org.apache.ignite</groupId>
-			<artifactId>ignite-spring-data</artifactId>
-			<version>${ignite.version}</version>
+			<groupId>io.projectreactor</groupId>
+			<artifactId>reactor-core</artifactId>
+			<version>3.3.9.RELEASE</version>
 		</dependency>
 		<dependency>
-			<groupId>org.apache.ignite</groupId>
-			<artifactId>ignite-core</artifactId>
-			<version>${ignite.version}</version>
+			<groupId>org.springframework.data</groupId>
+			<artifactId>spring-data-commons</artifactId>
+			<version>2.3.3.RELEASE</version>
 		</dependency>
+		<!-- Web -->
 		<dependency>
-			<groupId>org.apache.ignite</groupId>
-			<artifactId>ignite-spring</artifactId>
-			<version>${ignite.version}</version>
-			<!--Remove exclusion while upgrading ignite-spring version to 5.0-->
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+			<version>${spring.boot.version}</version>
+			<!-- Exclude the Tomcat dependency-->
 			<exclusions>
 				<exclusion>
-					<groupId>org.springframework</groupId>
-					<artifactId>spring-core</artifactId>
-				</exclusion>
-				<exclusion>
-					<groupId>org.springframework</groupId>
-					<artifactId>spring-beans</artifactId>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-tomcat</artifactId>
 				</exclusion>
 			</exclusions>
 		</dependency>
-
 		<dependency>
-			<groupId>org.apache.ignite</groupId>
-			<artifactId>ignite-log4j</artifactId>
-			<version>${ignite.version}</version>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-jetty</artifactId>
+			<version>${spring.boot.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.springfox</groupId>
+			<artifactId>springfox-swagger2</artifactId>
+			<version>${swagger.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.springfox</groupId>
+			<artifactId>springfox-swagger-ui</artifactId>
+			<version>${swagger.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.apache.ignite</groupId>
-			<artifactId>ignite-indexing</artifactId>
-			<version>${ignite.version}</version>
+			<groupId>com.hazelcast</groupId>
+			<artifactId>hazelcast</artifactId>
+			<version>${hazelcast.version}</version>
 		</dependency>
+
 
 		<dependency>
 			<groupId>io.reactivex.rxjava3</groupId>
@@ -90,18 +91,7 @@
 		</dependency>
 
 
-   		<dependency>
-   			<groupId>junit</groupId>
-   			<artifactId>junit</artifactId>
-   			<version>${junit.version}</version>
-   			<scope>test</scope>
-   		</dependency>
 		<!-- https://mvnrepository.com/artifact/com.google.code.findbugs/jsr305 -->
-		<dependency>
-		    <groupId>com.google.code.findbugs</groupId>
-		    <artifactId>jsr305</artifactId>
-		    <version>${jsr305.version}</version>
-		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
@@ -111,6 +101,11 @@
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-annotations</artifactId>
 			<version>${jackson.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.aspectj</groupId>
+			<artifactId>aspectjweaver</artifactId>
+			<version>${aop.version}</version>
 		</dependency>
 	</dependencies>
 </project>
