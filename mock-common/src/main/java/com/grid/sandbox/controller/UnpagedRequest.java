@@ -3,6 +3,8 @@ package com.grid.sandbox.controller;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
+import java.util.Optional;
+
 public class UnpagedRequest implements Pageable {
 
     private final Sort sort;
@@ -18,6 +20,11 @@ public class UnpagedRequest implements Pageable {
     @Override
     public boolean isPaged() {
         return false;
+    }
+
+    @Override
+    public boolean isUnpaged() {
+        return Pageable.super.isUnpaged();
     }
 
     @Override
@@ -41,6 +48,11 @@ public class UnpagedRequest implements Pageable {
     }
 
     @Override
+    public Sort getSortOr(Sort sort) {
+        return this.sort;
+    }
+
+    @Override
     public Pageable next() {
         return this;
     }
@@ -56,8 +68,18 @@ public class UnpagedRequest implements Pageable {
     }
 
     @Override
+    public Pageable withPage(int pageNumber) {
+        return null;
+    }
+
+    @Override
     public boolean hasPrevious() {
         return false;
+    }
+
+    @Override
+    public Optional<Pageable> toOptional() {
+        return Optional.of(this);
     }
 
 }

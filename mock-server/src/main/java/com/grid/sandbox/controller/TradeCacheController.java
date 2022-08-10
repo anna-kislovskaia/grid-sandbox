@@ -2,15 +2,15 @@ package com.grid.sandbox.controller;
 
 import com.grid.sandbox.service.TradeCacheUpdater;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
-@Controller
+@RestController
 @RequestMapping("/trades/cache")
 public class TradeCacheController {
 
