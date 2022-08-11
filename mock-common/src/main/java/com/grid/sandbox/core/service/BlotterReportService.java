@@ -11,6 +11,9 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
+
+import static com.grid.sandbox.core.model.UpdateEvent.getRecordVersion;
 
 @Log4j2
 @AllArgsConstructor
@@ -19,8 +22,9 @@ public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
     private final Comparator<V> comparator;
 
     public Flowable<PageUpdate<V>> getReport(Flowable<UpdateEvent<K, V>> dataFeed, Flowable<BlotterViewport> viewportFeed) {
-        final RedBlackBST<V, V> sortedValue = new RedBlackBST<>(comparator);
+        final RedBlackBST<V, V> sortedValues = new RedBlackBST<>(comparator);
         final AtomicReference<Map<K, V>> page = new AtomicReference<>(new HashMap<>());
+        final Set<K> keys = new HashSet<>();
 
         return Flowable.merge(
                 dataFeed.map(event -> new ContentUpdateEvent<>(viewportFeed.blockingFirst(), event)),
@@ -30,10 +34,10 @@ public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
                     boolean snapshot = false;
                     // skip tree updates on viewport change
                     if (event.updateEvent != null) {
-                        int size = sortedValue.size();
+                        int size = sortedValues.size();
                         snapshot = event.updateEvent.getType() == UpdateEvent.Type.SNAPSHOT;
-                        changed = handleValueUpdates(event.updateEvent, filter, sortedValue);
-                        if (size != sortedValue.size() || snapshot) {
+                        changed = processUpdateEvent(event.updateEvent, filter, sortedValues, keys);
+                        if (size != sortedValues.size() || snapshot) {
                             // force page recalculation on size change
                             page.set(new HashMap<>());
                         }
@@ -41,14 +45,14 @@ public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
 
                     BlotterViewport viewport = event.viewport;
                     PageUpdate.Builder<V> builder = PageUpdate.<V>builder()
-                            .totalSize(sortedValue.size())
+                            .totalSize(sortedValues.size())
                             .pageSize(viewport.getPageSize())
                             .pageNumber(viewport.getPageNumber());
 
                     if (viewport.isPaged()) {
-                        handlePagedUpdate(viewport, page, builder, changed, sortedValue);
+                        handlePagedUpdate(viewport, page, builder, changed, sortedValues);
                     } else {
-                        handleUnpagedUpdate(builder, snapshot, changed, sortedValue);
+                        handleUnpagedUpdate(builder, snapshot, changed, sortedValues);
                     }
                     return builder.build();
                 })
@@ -125,19 +129,32 @@ public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
         return list;
     }
 
-    private Map<K, V> handleValueUpdates(UpdateEvent<K, V> updateEvent, Predicate<V> filter, RedBlackBST<V, V> sortedValues) {
+    private Map<K, V> processUpdateEvent(UpdateEvent<K, V> updateEvent,
+                                         Predicate<V> filter,
+                                         RedBlackBST<V, V> sortedValues,
+                                         Set<K> keys)
+    {
         Map<K, V> updated = new HashMap<>();
         boolean snapshot = updateEvent.getType() == UpdateEvent.Type.SNAPSHOT;
         if (snapshot) {
             sortedValues.clear();
+            keys.clear();
         }
         log.info("Processing trade update: {} {}", snapshot, updateEvent.getUpdates().size());
         for (UpdateEventEntry<K, V> event : updateEvent.getUpdates()) {
-            boolean valueDeleted = event.getOldValue() != null && sortedValues.delete(event.getOldValue()) != null;
+            V oldValue = getOldValue(sortedValues, keys, event);
+            if (getRecordVersion(oldValue) > event.getVersion()) {
+                log.info("Skip stale update for key {} {} to {} ", oldValue.getRecordKey(), oldValue.getRecordVersion(), event.getVersion());
+                continue;
+            }
+
+            boolean valueDeleted = oldValue != null && sortedValues.delete(event.getOldValue()) != null;
+            keys.remove(event.getRecordKey());
             V value = event.getValue();
             boolean valueUpdated = value != null && filter.test(value);
             if (valueUpdated) {
                 sortedValues.put(value, value);
+                keys.add(value.getRecordKey());
             }
             if ((valueDeleted || valueUpdated) && !snapshot) {
                 V changed = valueUpdated ? value : event.getOldValue();
@@ -146,6 +163,26 @@ public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
         }
         log.info("Processed");
         return updated;
+    }
+
+    private V getOldValue(RedBlackBST<V, V> sortedValues, Set<K> keys, UpdateEventEntry<K, V> event) {
+        V oldValue = null;
+        if (keys.contains(event.getRecordKey())) {
+            if (event.getOldValue() != null) {
+                oldValue = sortedValues.get(event.getOldValue());
+            }
+            if (oldValue == null) {
+                oldValue = sortedValues.get(event.getValue());
+            }
+            if (oldValue == null) {
+               oldValue = StreamSupport.stream(sortedValues.keys().spliterator(), false)
+                       .filter(value -> value.getRecordKey() == event.getRecordKey())
+                       .findAny()
+                       .orElse(null);
+               log.info("Old value by iteration for {} is {}", event.getRecordKey(), oldValue);
+            }
+        }
+        return oldValue;
     }
 
     @Data

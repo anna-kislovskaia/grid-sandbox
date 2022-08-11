@@ -1,7 +1,6 @@
 package com.grid.sandbox.utils;
 
-import com.grid.sandbox.core.service.FilterOptionBuilder;
-import com.grid.sandbox.core.service.FilterOptionBuilderImpl;
+import com.grid.sandbox.core.service.PropertyOptionsTracker;
 import com.grid.sandbox.model.Trade;
 
 import java.util.Comparator;
@@ -34,11 +33,11 @@ public class CacheUtils {
     public static final Function<Trade, String> TRADE_CLIENT_MAPPER = Trade::getClient;
     public static final Function<Trade, String> TRADE_STATUS_MAPPER = trade -> trade.getStatus().name();
 
-    public static FilterOptionBuilder<Trade> getTradeFilterOptionBuilder() {
+    public static PropertyOptionsTracker<Trade> getTradeFilterOptionBuilder() {
         Map<String, Function<Trade, String>> mappers = new HashMap<>();
         mappers.put("client", TRADE_CLIENT_MAPPER);
         mappers.put("status", TRADE_STATUS_MAPPER);
-        return new FilterOptionBuilderImpl<>(mappers);
+        return new PropertyOptionsTracker<>(mappers);
     }
 
     public static Predicate<Trade> getTradePredicate(Function<Trade, String> mapper, Set<String> options) {

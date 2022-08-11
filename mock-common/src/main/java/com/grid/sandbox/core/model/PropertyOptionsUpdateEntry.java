@@ -11,14 +11,19 @@ import java.util.Set;
 @AllArgsConstructor
 @Getter
 @EqualsAndHashCode
-public class FilterOptionUpdateEntry {
+public class PropertyOptionsUpdateEntry {
     @JsonProperty
     String name;
     @JsonProperty
     Set<String> options;
 
-    public FilterOptionUpdateEntry(String name) {
+    public PropertyOptionsUpdateEntry(String name) {
         this.name = name;
         this.options = new HashSet<>();
+    }
+
+    @Override
+    public String toString() {
+        return "PropertyOptions:" + name + "[" + options.size() + "]";
     }
 }

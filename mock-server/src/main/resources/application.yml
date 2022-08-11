@@ -7,5 +7,5 @@ logging:
   pattern:
     console: "%d %-5level [%thread] %logger{32} : %msg%n"
   level:
-    org.springframework: DEBUG
+    org.springframework: INFO
     com.grid.sandbox: DEBUG

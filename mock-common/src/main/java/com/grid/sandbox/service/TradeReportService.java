@@ -4,14 +4,13 @@ import com.grid.sandbox.core.model.PageUpdate;
 import com.grid.sandbox.core.model.UpdateEvent;
 import com.grid.sandbox.core.utils.ReportSubscription;
 import com.grid.sandbox.core.service.BlotterReportService;
-import com.grid.sandbox.core.service.FilterOptionService;
+import com.grid.sandbox.core.service.PropertyOptionsService;
 import com.grid.sandbox.core.utils.MultiComparator;
 import com.grid.sandbox.core.utils.MultiPredicate;
 import com.grid.sandbox.model.Trade;
 import com.grid.sandbox.utils.*;
 import io.reactivex.Flowable;
 import io.reactivex.Scheduler;
-import io.reactivex.schedulers.Schedulers;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
@@ -38,12 +37,13 @@ public class TradeReportService {
         String feedId = "tradeFeed-" + subscription.getSubscriptionId();
         log.info("{} Subscription requested", feedId);
         Scheduler scheduler = subscription.getScheduler();
-        FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
-                tradeFeedService.getTradeFeed(Schedulers.computation()),
+        PropertyOptionsService<String, Trade> filterOptionService = new PropertyOptionsService<>(
+                tradeFeedService.getTradeFeed(scheduler),
                 tradeFeedService.getTradeSnapshotFeed(),
                 CacheUtils.getTradeFilterOptionBuilder(),
                 reportFilter
         );
+        filterOptionService.subscribe();
 
         Flowable<PageUpdate<Trade>> valueFeed = subscription.getUserSettingsFeed()
                 .switchMap(params -> {
@@ -56,17 +56,16 @@ public class TradeReportService {
                     return blotterReportService.getReport(tradeFeed, subscription.getViewportFeed());
                 });
 
-        return Flowable.combineLatest(
-                filterOptionService.getFilterOptions().observeOn(scheduler),
-                valueFeed,
-                (filters, pageUpdate) -> pageUpdate.toBuilder()
-                        .filterOptions(filters)
-                        .subscriptionId(subscription.getSubscriptionId())
-                        .build()
-        )
-                .doOnCancel(() -> log.info("{} Subscription cancelled", feedId))
+        return valueFeed.map(pageUpdate ->
+                        pageUpdate.toBuilder()
+                            .filterOptions(filterOptionService.getFilterOptions())
+                            .subscriptionId(subscription.getSubscriptionId())
+                            .build())
+                .doOnCancel(() -> {
+                    log.info("{} Subscription cancelled", feedId);
+                    filterOptionService.close();
+                })
                 .doOnError(log::error);
-
     }
 
     private MultiComparator<Trade> getTradeComparatorBySort(Sort sort) {

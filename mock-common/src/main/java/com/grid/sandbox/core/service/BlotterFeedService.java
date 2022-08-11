@@ -6,6 +6,8 @@ import com.grid.sandbox.core.model.UpdateEventEntry;
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
 import io.reactivex.Scheduler;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.flowables.ConnectableFlowable;
 import io.reactivex.subjects.BehaviorSubject;
 import io.reactivex.subjects.PublishSubject;
 import io.reactivex.subjects.Subject;
@@ -14,11 +16,11 @@ import lombok.extern.log4j.Log4j2;
 import javax.annotation.PostConstruct;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
+
+import static com.grid.sandbox.core.model.UpdateEvent.getRecordVersion;
 
 @Log4j2
 public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
@@ -101,39 +103,30 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
 
     public Flowable<UpdateEvent<K, V>> getFeed(Scheduler scheduler) {
         log.info("Feed requested");
-        List<UpdateEvent<K, V>> processed = new CopyOnWriteArrayList<>();
+        ConnectableFlowable<UpdateEvent<K, V>> eventFeed = updateEventFlowable
+                .doOnSubscribe(s -> log.info("Event feed subscribed"))
+                .publish(updateEventBufferSize);
+        Disposable eventFeedConnection = eventFeed.connect();
         Flowable<UpdateEvent<K, V>> initialSnapshotFeed = snapshotFlowable.take(1)
                 .map(snapshot -> {
                     try {
+                        log.info("Calculate initial snapshot");
                         snapshotLock.readLock().lock();
                         return createSnapshotEvent(snapshot);
                     } finally {
                         snapshotLock.readLock().unlock();
                     }
-                })
-                .subscribeOn(scheduler)
-                .observeOn(scheduler);
-        Flowable<UpdateEvent<K, V>> eventFeed = updateEventFlowable
-                .onBackpressureBuffer(updateEventBufferSize)
-                .observeOn(scheduler);
-        AtomicBoolean initialSnapshotReceived = new AtomicBoolean();
-        return Flowable.merge(eventFeed, initialSnapshotFeed)
-                .map(event -> {
-                    if (!initialSnapshotReceived.get()) {
-                        if (event.isSnapshot()) {
-                            UpdateEvent<K, V> snapshotEvent = mergeBufferedSnapshotUpdates(event, processed);
-                            log.info("Initial snapshot received {}", event.toShortString());
-                            initialSnapshotReceived.set(true);
-                            return snapshotEvent;
-                        } else {
-                            log.info("Buffer update event {}", event);
-                            processed.add(event);
-                            return UpdateEvent.<K, V>empty();
-                        }
-                    }
-                    return event;
-                })
+                });
+        return initialSnapshotFeed
+                .switchMap(eventFeed::startWithItem)
+                .observeOn(scheduler)
                 .doOnError(log::error)
+                .doOnCancel(() -> {
+                    if (!eventFeedConnection.isDisposed()) {
+                        log.info("Disconnect event feed");
+                        eventFeedConnection.dispose();
+                    }
+                })
                 .filter(event -> !event.isEmpty());
     }
 
@@ -144,34 +137,6 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                 .collect(Collectors.toList());
         log.info("Snapshot event created {}", eventSnapshot.size());
         return new UpdateEvent<>(eventSnapshot, UpdateEvent.Type.SNAPSHOT);
-    }
-
-    public static  <K, V extends BlotterReportRecord<K>> UpdateEvent<K, V> mergeBufferedSnapshotUpdates(
-            UpdateEvent<K, V> original,
-            List<UpdateEvent<K, V>> bufferedUpdates)
-    {
-        if (bufferedUpdates.isEmpty()) {
-            return original;
-        }
-        log.info("Process {} buffered updates to initial snapshot", bufferedUpdates.size());
-        Map<K, UpdateEventEntry<K, V>> snapshot = original.getUpdates().stream()
-                .collect(Collectors.toMap(UpdateEventEntry::getRecordKey, entry -> entry));
-        bufferedUpdates.stream()
-                .flatMap(updateEvent -> updateEvent.getUpdates().stream())
-                .forEach(entry -> {
-                    UpdateEventEntry<K, V> current = snapshot.get(entry.getRecordKey());
-                    long currentVersion = UpdateEventEntry.getVersion(current);
-                    if (currentVersion < entry.getVersion()) {
-                        log.info("Update snapshot from buffer id={}: {} -> {}", entry.getRecordKey(), currentVersion, entry.getVersion());
-                        snapshot.put(entry.getRecordKey(), UpdateEventEntry.addedValue(entry.getValue()));
-                    }
-                });
-        log.info("Buffered updates processed");
-        return new UpdateEvent<>(snapshot.values(), UpdateEvent.Type.SNAPSHOT);
-    }
-
-    private static long getRecordVersion(BlotterReportRecord<?> record) {
-        return record == null ? 0 : record.getRecordVersion();
     }
 }
 

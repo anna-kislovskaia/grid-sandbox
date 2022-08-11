@@ -1,13 +1,15 @@
 package com.grid.sandbox.core.service;
 
-import com.grid.sandbox.core.model.FilterOptionUpdateEntry;
+import com.grid.sandbox.core.model.PropertyOptionsUpdateEntry;
 import com.grid.sandbox.core.model.UpdateEvent;
 import com.grid.sandbox.core.model.UpdateEventEntry;
 import com.grid.sandbox.model.*;
 import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.subjects.BehaviorSubject;
+import lombok.extern.log4j.Log4j2;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,27 +19,23 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.grid.sandbox.utils.CacheUtils.*;
 import static com.grid.sandbox.utils.TestHelpers.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-class FilterOptionServiceTest {
-    private static final FilterOptionBuilder<Trade> TRADE_FILTER_OPTION_BUILDER = getTradeFilterOptionBuilder();
+@Log4j2
+class PropertyOptionsServiceTest {
+    private static final PropertyOptionsTracker<Trade> TRADE_FILTER_OPTION_BUILDER = getTradeFilterOptionBuilder();
     private List<Trade> testTrades ;
     private Map<String, UpdateEventEntry<String, Trade>> snapshot;
     @Mock
-    private Consumer<List<FilterOptionUpdateEntry>> consumer;
+    private Consumer<Collection<PropertyOptionsUpdateEntry>> consumer;
     @Captor
-    private ArgumentCaptor<List<FilterOptionUpdateEntry>> filterResetCaptor;
+    private ArgumentCaptor<List<PropertyOptionsUpdateEntry>> filterResetCaptor;
 
     private Flowable<UpdateEvent<String, Trade>> snapshotFeed;
 
@@ -54,10 +52,15 @@ class FilterOptionServiceTest {
     public void testFilterTradeUpdated() throws Throwable {
         BehaviorSubject<UpdateEvent<String, Trade>> subject = BehaviorSubject.create();
         Flowable<UpdateEvent<String, Trade>> feed = subject.toFlowable(BackpressureStrategy.LATEST).startWith(snapshotFeed);
-        FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
+        PropertyOptionsService<String, Trade> filterOptionService = new PropertyOptionsService<>(
                 feed, snapshotFeed, TRADE_FILTER_OPTION_BUILDER, ACCEPT_ALL
         );
-        filterOptionService.getFilterOptions().subscribe(consumer);
+        filterOptionService.subscribe();
+
+        Map<String, Integer> validationMap = new HashMap<>();
+        validationMap.put("client", 4);
+        validationMap.put("status", 1);
+        validatePropertyOptions(filterOptionService.getFilterOptions(), validationMap);
 
         // updated and add
         Trade trade1 = snapshot.get("1").getValue().toBuilder().status(TradeStatus.CANCELLED).build();
@@ -66,20 +69,10 @@ class FilterOptionServiceTest {
         snapshot.put("16", createEventEntry(trade16, null));
         subject.onNext(new UpdateEvent<>(Arrays.asList(snapshot.get("1"), snapshot.get("16")), UpdateEvent.Type.INCREMENTAL));
 
-        verify(consumer, times(2)).accept(filterResetCaptor.capture());
-        List<FilterOptionUpdateEntry> initial = filterResetCaptor.getAllValues().get(0);
-        assertEquals(2, initial.size());
-        // client names
-        assertEquals(4, initial.get(0).getOptions().size());
-        // statuses
-        assertEquals(1, initial.get(1).getOptions().size());
-
-        List<FilterOptionUpdateEntry> updated = filterResetCaptor.getAllValues().get(1);
-        assertEquals(2, updated.size());
-        // client names
-        assertEquals(5, updated.get(0).getOptions().size());
-        // statuses
-        assertEquals(3, updated.get(1).getOptions().size());
+        validationMap.put("client", 5);
+        validationMap.put("status", 3);
+        validatePropertyOptions(filterOptionService.getFilterOptions(), validationMap);
+        filterOptionService.close();
     }
 
     @Test
@@ -89,37 +82,37 @@ class FilterOptionServiceTest {
                 Flowable.fromSupplier(() -> new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT));
         Flowable<UpdateEvent<String, Trade>> feed = subject.toFlowable(BackpressureStrategy.LATEST).startWith(snapshotFeed);
 
-        FilterOptionService<String, Trade> filterOptionService = new FilterOptionService<>(
+        PropertyOptionsService<String, Trade> filterOptionService = new PropertyOptionsService<>(
                 feed, snapshotFeed, TRADE_FILTER_OPTION_BUILDER, ACCEPT_OPENED
         );
-        filterOptionService.getFilterOptions().subscribe(consumer);
+        filterOptionService.subscribe();
+
+        Map<String, Integer> validationMap = new HashMap<>();
+        validationMap.put("client", 4);
+        validationMap.put("status", 1);
+        validatePropertyOptions(filterOptionService.getFilterOptions(), validationMap);
 
         // cancel all "client 3" trades
-        List<Trade> client3 = snapshot.values().stream()
+        List<UpdateEventEntry<String, Trade>> updates = snapshot.values().stream()
                 .filter(event -> "client 3".equals(event.getValue().getClient()))
                 .map(UpdateEventEntry::getValue)
+                .map(trade -> {
+                    Trade updated = trade.toBuilder().status(TradeStatus.CANCELLED).build();
+                    snapshot.put(updated.getRecordKey(), createEventEntry(updated, null));
+                    return createEventEntry(updated, trade);
+                })
                 .collect(Collectors.toList());
-        List<UpdateEventEntry<String, Trade>> updates = client3.stream().map(trade -> {
-            Trade cancelled = trade.toBuilder().status(TradeStatus.CANCELLED).build();
-            UpdateEventEntry<String, Trade> entry = createEventEntry(cancelled, trade);
-            snapshot.put(trade.getTradeId(), entry);
-            return entry;
-        }).collect(Collectors.toList());
         subject.onNext(new UpdateEvent<>(updates, UpdateEvent.Type.INCREMENTAL));
 
-        verify(consumer, times(2)).accept(filterResetCaptor.capture());
-        List<FilterOptionUpdateEntry> initial = filterResetCaptor.getAllValues().get(0);
-        assertEquals(2, initial.size());
-        // client names
-        assertEquals(4, initial.get(0).getOptions().size());
-        // statuses
-        assertEquals(1, initial.get(1).getOptions().size());
+        validationMap.put("client", 3);
+        validatePropertyOptions(filterOptionService.getFilterOptions(), validationMap);
+    }
 
-        List<FilterOptionUpdateEntry> updated = filterResetCaptor.getAllValues().get(1);
-        assertEquals(2, updated.size());
-        // client names
-        assertEquals(3, updated.get(0).getOptions().size());
-        // statuses
-        assertEquals(1, updated.get(1).getOptions().size());
+    private void validatePropertyOptions(Collection<PropertyOptionsUpdateEntry> options, Map<String, Integer> expected) {
+        log.info("Validating filter options: {} {}", options, expected);
+        assertEquals(expected.size(), options.size());
+        for (PropertyOptionsUpdateEntry propertyOptions : options) {
+            assertEquals(expected.get(propertyOptions.getName()), propertyOptions.getOptions().size());
+        }
     }
 }

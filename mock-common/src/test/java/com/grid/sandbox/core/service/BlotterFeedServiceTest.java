@@ -119,33 +119,6 @@ class BlotterFeedServiceTest {
         assertEquals(Long.MAX_VALUE, event.getUpdates().iterator().next().getValue().getLastUpdateTimestamp());
     }
 
-
-    @Test
-    void testMergeSnapshot() {
-        Map<String, Trade> trades = testTrades.stream().collect(Collectors.toMap(Trade::getTradeId, trade -> trade));
-        UpdateEvent<String, Trade> snapshot = BlotterFeedService.createSnapshotEvent(trades);
-
-        Trade original = testTrades.get(testTrades.size() / 2);
-        Trade stale = original.toBuilder().status(TradeStatus.DRAFT).lastUpdateTimestamp(0).build();
-        Trade middle = original.toBuilder().status(TradeStatus.REJECTED).lastUpdateTimestamp(original.getLastUpdateTimestamp() + 5).build();
-        Trade updated = original.toBuilder().status(TradeStatus.CANCELLED).lastUpdateTimestamp(original.getLastUpdateTimestamp() + 10).build();
-
-        trades.put(middle.getTradeId(), middle);
-        UpdateEvent<String, Trade> middleSnapshot = BlotterFeedService.createSnapshotEvent(trades);
-        List<UpdateEvent<String, Trade>> events = Arrays.asList(
-                new UpdateEvent<>(Collections.singleton(new UpdateEventEntry<>(original, stale)), UpdateEvent.Type.INCREMENTAL),
-                middleSnapshot,
-                new UpdateEvent<>(Collections.singleton(new UpdateEventEntry<>(updated, middle)), UpdateEvent.Type.INCREMENTAL)
-        );
-
-        UpdateEvent<String, Trade> updateEvent = BlotterFeedService.mergeBufferedSnapshotUpdates(snapshot, events);
-        trades.put(updated.getTradeId(), updated);
-        assertTrue(updateEvent.isSnapshot());
-        for(UpdateEventEntry<String, Trade> entry : updateEvent.getUpdates()) {
-            assertSame(entry.getValue(), trades.get(entry.getRecordKey()));
-        }
-    }
-
     @RepeatedTest(3)
     void testGetAllNewFeed() throws Throwable {
         feedService.reset(testTrades);
@@ -214,7 +187,7 @@ class BlotterFeedServiceTest {
         });
 
         List<UpdateEvent<String, Trade>> allEvents = new CopyOnWriteArrayList<>();
-        feedService.getFeed(Schedulers.newThread())
+        Disposable feedSubscription = feedService.getFeed(Schedulers.newThread())
                 .doOnNext((event) -> {
                     log.info(event);
                     lastUpdateTime.set(System.currentTimeMillis());
@@ -237,6 +210,7 @@ class BlotterFeedServiceTest {
         }
 
         log.info("Start evaluation");
+        feedSubscription.dispose();
         // test events applicable
         Map<String, Trade> snapshot = new HashMap<>();
         for(UpdateEvent<String, Trade> event : allEvents) {
@@ -247,7 +221,12 @@ class BlotterFeedServiceTest {
             } else {
                 event.getUpdates().forEach(entry -> {
                     if (entry.getOldValue() != null) {
-                        assertSame(entry.getOldValue(), snapshot.get(entry.getRecordKey()));
+                        Trade currentValue = snapshot.get(entry.getRecordKey());
+                        if (currentValue == null) {
+                            log.error("Record expected for entry: {}", entry);
+                        }
+                        assertNotNull(currentValue);
+                        assertTrue(currentValue.getRecordVersion() >= entry.getOldValue().getRecordVersion());
                     }
                     snapshot.put(entry.getRecordKey(), entry.getValue());
                 });
