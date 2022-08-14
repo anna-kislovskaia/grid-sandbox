@@ -47,7 +47,7 @@ class PerformanceTradeReportServiceTest {
     @Disabled
     void testSnapshotComparators() throws Throwable {
         Sort sort = Sort.by(Sort.Direction.ASC, "client", "balance");
-        blotterReportTest(300000, 10, sort);
+        blotterReportTest(30000, 1000, sort);
     }
 
     void blotterReportTest(int itemCount, int subscriptionCount, Sort sort) throws Throwable {

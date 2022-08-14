@@ -29,7 +29,7 @@ public class PropertyOptionsService<K, V extends BlotterReportRecord<K>> {
                 .filter(this::filterOptionsMightChange)
                 .map(event -> {
                     log.info("{}: Recalculate property options start", feedId);
-                    UpdateEvent<K, V> snapshot = event.isSnapshot() ? event : blotterFeedService.getSnapshotFeed().blockingFirst();
+                    UpdateEvent<K, V> snapshot = event.isSnapshot() ? event : blotterFeedService.getSnapshot();
                     Stream<V> valueStream = snapshot.getUpdates().stream().map(UpdateEventEntry::getValue).filter(filter);
                     optionsTracker.resetFilterOptions(valueStream);
                     log.info("{}: Recalculate property options done", feedId);

@@ -235,11 +235,7 @@ class BlotterFeedServiceTest {
             }
         }
 
-        UpdateEvent<String, Trade> event = feedService.getSnapshotFeed().take(1)
-                .subscribeOn(SAME_THREAD_SCHEDULER)
-                .toList()
-                .blockingGet()
-                .get(0);
+        UpdateEvent<String, Trade> event = feedService.getSnapshot();
         assertEquals(event.getUpdates().size(), snapshot.size());
         event.getUpdates().stream().map(UpdateEventEntry::getValue)
                 .forEach(value -> assertSame(value, snapshot.get(value.getRecordKey())));

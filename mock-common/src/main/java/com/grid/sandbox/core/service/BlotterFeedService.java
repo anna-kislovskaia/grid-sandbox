@@ -25,9 +25,8 @@ import static com.grid.sandbox.core.model.UpdateEvent.getRecordVersion;
 
 @Log4j2
 public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
-    private final Subject<ConcurrentMap<K, V>> snapshotPublisher = BehaviorSubject.create();
+    private final BehaviorSubject<ConcurrentMap<K, V>> snapshotPublisher = BehaviorSubject.create();
     private final Flowable<ConcurrentMap<K, V>> snapshotFlowable = snapshotPublisher.toFlowable(BackpressureStrategy.LATEST);
-    private final Flowable<UpdateEvent<K, V>> snapshotEventFlowable = snapshotFlowable.map(this::createSnapshotEvent);
     private final Subject<Collection<V>> updatePublisher = PublishSubject.create();
     private final Flowable<Collection<V>> updateFlowable = updatePublisher.toFlowable(BackpressureStrategy.MISSING);
     private final AtomicReference<UpdateEvent<K, V>> lastSnapshotEvent = new AtomicReference<>();
@@ -100,8 +99,13 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
         return new UpdateEvent<>(recordUpdates, UpdateEvent.Type.INCREMENTAL);
     }
 
-    public Flowable<UpdateEvent<K, V>> getSnapshotFeed() {
-        return snapshotEventFlowable;
+    public UpdateEvent<K, V> getSnapshot() {
+        Map<K, V> snapshot = snapshotPublisher.getValue();
+        if (snapshot == null) {
+            return new UpdateEvent<>(Collections.emptyList(), UpdateEvent.Type.SNAPSHOT);
+        } else {
+            return createSnapshotEvent(snapshot);
+        }
     }
 
     public Flowable<UpdateEvent<K, V>> getFeed(String feedId, Scheduler scheduler) {
@@ -110,13 +114,9 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                 .doOnSubscribe(s -> log.info("{}: Event feed subscribed", feedId))
                 .publish(updateEventBufferSize);
         Disposable eventFeedConnection = eventFeed.connect();
-        Flowable<UpdateEvent<K, V>> initialSnapshotFeed = snapshotFlowable.take(1)
-                .map(snapshot -> {
-                    log.info("{}: Calculate initial snapshot", feedId);
-                    return createSnapshotEvent(snapshot);
-                });
-        return initialSnapshotFeed
-                .switchMap(eventFeed::startWithItem)
+        log.info("{}: Calculate initial snapshot", feedId);
+        UpdateEvent<K, V> initialSnapshot = getSnapshot();
+        return eventFeed.startWithItem(initialSnapshot)
                 .subscribeOn(scheduler)
                 .observeOn(scheduler)
                 .doOnError(log::error)
