@@ -20,7 +20,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static com.grid.sandbox.utils.CacheUtils.*;
 import static com.grid.sandbox.utils.TestHelpers.*;
@@ -31,29 +30,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class PropertyOptionsServiceTest {
     private static final PropertyOptionsTracker<Trade> TRADE_FILTER_OPTION_BUILDER = getTradeFilterOptionBuilder();
     private List<Trade> testTrades ;
-    private Map<String, UpdateEventEntry<String, Trade>> snapshot;
-    @Mock
-    private Consumer<Collection<PropertyOptionsUpdateEntry>> consumer;
-    @Captor
-    private ArgumentCaptor<List<PropertyOptionsUpdateEntry>> filterResetCaptor;
-
-    private Flowable<UpdateEvent<String, Trade>> snapshotFeed;
+    private BlotterFeedService<String, Trade> blotterFeedService = new BlotterFeedService<>();
+    {
+        blotterFeedService.init();
+    }
 
     @BeforeEach
     void init() {
         testTrades = generateTrades();
-        snapshot = testTrades.stream()
-                .collect(Collectors.toMap(Trade::getTradeId, trade -> createEventEntry(trade, null)));
-        snapshotFeed = Flowable.fromSupplier(() ->
-                new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT));
+        blotterFeedService.reset(testTrades);
     }
 
     @Test
     public void testFilterTradeUpdated() throws Throwable {
-        BehaviorSubject<UpdateEvent<String, Trade>> subject = BehaviorSubject.create();
-        Flowable<UpdateEvent<String, Trade>> feed = subject.toFlowable(BackpressureStrategy.LATEST).startWith(snapshotFeed);
         PropertyOptionsService<String, Trade> filterOptionService = new PropertyOptionsService<>(
-                feed, snapshotFeed, TRADE_FILTER_OPTION_BUILDER, ACCEPT_ALL
+                "feedId", blotterFeedService, SAME_THREAD_SCHEDULER, TRADE_FILTER_OPTION_BUILDER, ACCEPT_ALL
         );
         filterOptionService.subscribe();
 
@@ -63,11 +54,9 @@ class PropertyOptionsServiceTest {
         validatePropertyOptions(filterOptionService.getFilterOptions(), validationMap);
 
         // updated and add
-        Trade trade1 = snapshot.get("1").getValue().toBuilder().status(TradeStatus.CANCELLED).build();
+        Trade trade1 = testTrades.get(0).toBuilder().status(TradeStatus.CANCELLED).build();
         Trade trade16 = new Trade("16", BigDecimal.valueOf(250), "client 5", System.currentTimeMillis(), TradeStatus.DRAFT);
-        snapshot.put("1", createEventEntry(trade1, snapshot.get("1").getValue()));
-        snapshot.put("16", createEventEntry(trade16, null));
-        subject.onNext(new UpdateEvent<>(Arrays.asList(snapshot.get("1"), snapshot.get("16")), UpdateEvent.Type.INCREMENTAL));
+        blotterFeedService.update(Arrays.asList(trade16, trade1));
 
         validationMap.put("client", 5);
         validationMap.put("status", 3);
@@ -77,13 +66,8 @@ class PropertyOptionsServiceTest {
 
     @Test
     public void testFilterTradeRemoved() throws Throwable {
-        BehaviorSubject<UpdateEvent<String, Trade>> subject = BehaviorSubject.create();
-        Flowable<UpdateEvent<String, Trade>> snapshotFeed =
-                Flowable.fromSupplier(() -> new UpdateEvent<>(new ArrayList<>(snapshot.values()), UpdateEvent.Type.SNAPSHOT));
-        Flowable<UpdateEvent<String, Trade>> feed = subject.toFlowable(BackpressureStrategy.LATEST).startWith(snapshotFeed);
-
         PropertyOptionsService<String, Trade> filterOptionService = new PropertyOptionsService<>(
-                feed, snapshotFeed, TRADE_FILTER_OPTION_BUILDER, ACCEPT_OPENED
+                "feedId", blotterFeedService, SAME_THREAD_SCHEDULER, TRADE_FILTER_OPTION_BUILDER, ACCEPT_OPENED
         );
         filterOptionService.subscribe();
 
@@ -93,16 +77,11 @@ class PropertyOptionsServiceTest {
         validatePropertyOptions(filterOptionService.getFilterOptions(), validationMap);
 
         // cancel all "client 3" trades
-        List<UpdateEventEntry<String, Trade>> updates = snapshot.values().stream()
-                .filter(event -> "client 3".equals(event.getValue().getClient()))
-                .map(UpdateEventEntry::getValue)
-                .map(trade -> {
-                    Trade updated = trade.toBuilder().status(TradeStatus.CANCELLED).build();
-                    snapshot.put(updated.getRecordKey(), createEventEntry(updated, null));
-                    return createEventEntry(updated, trade);
-                })
-                .collect(Collectors.toList());
-        subject.onNext(new UpdateEvent<>(updates, UpdateEvent.Type.INCREMENTAL));
+        List<Trade> updates = testTrades.stream()
+                .filter(trade -> "client 3".equals(trade.getClient()))
+                .map(trade -> trade.toBuilder().status(TradeStatus.CANCELLED).build())
+                .toList();
+        blotterFeedService.update(updates);
 
         validationMap.put("client", 3);
         validatePropertyOptions(filterOptionService.getFilterOptions(), validationMap);

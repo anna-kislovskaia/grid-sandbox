@@ -1,7 +1,7 @@
 package com.grid.sandbox.core.service;
 
 import com.grid.sandbox.core.model.*;
-import io.reactivex.Flowable;
+import io.reactivex.Scheduler;
 import io.reactivex.disposables.Disposable;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -16,25 +16,27 @@ import java.util.stream.Stream;
 @AllArgsConstructor
 @Log4j2
 public class PropertyOptionsService<K, V extends BlotterReportRecord<K>> {
-    private Flowable<UpdateEvent<K, V>> updateFeed;
-    private Flowable<UpdateEvent<K, V>> snapshotFeed;
+    private String feedId;
+    private BlotterFeedService<K, V> blotterFeedService;
+    private Scheduler scheduler;
     private PropertyOptionsTracker<V> optionsTracker;
     private Predicate<V> filter;
     private final AtomicReference<Disposable> subscription = new AtomicReference<>();
 
     public void subscribe() {
         close();
-        Disposable filterSubscription = updateFeed.filter(this::filterOptionsMightChange)
+        Disposable filterSubscription = blotterFeedService.getFeed(feedId, scheduler)
+                .filter(this::filterOptionsMightChange)
                 .map(event -> {
-                    log.info("Recalculate property options start");
-                    UpdateEvent<K, V> snapshot = snapshotFeed.blockingFirst();
+                    log.info("{}: Recalculate property options start", feedId);
+                    UpdateEvent<K, V> snapshot = event.isSnapshot() ? event : blotterFeedService.getSnapshotFeed().blockingFirst();
                     Stream<V> valueStream = snapshot.getUpdates().stream().map(UpdateEventEntry::getValue).filter(filter);
                     optionsTracker.resetFilterOptions(valueStream);
-                    log.info("Recalculate property options done");
+                    log.info("{}: Recalculate property options done", feedId);
                     return optionsTracker.getFilterOptions();
                 })
                 .doOnCancel(() -> {
-                    log.info("Property option tracker closed");
+                    log.info("{}: Property option tracker closed", feedId);
                 })
                 .subscribe();
         if (!subscription.compareAndSet(null, filterSubscription)) {

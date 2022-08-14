@@ -20,7 +20,7 @@ public class CacheUtils {
                 String[] items1 = trade1.getTradeId().split("\\.");
                 String[] items2 = trade2.getTradeId().split("\\.");
                 int result = items1[0].compareTo(items2[0]);
-                if (result == 0) {
+                if (result == 0 && items1.length > 1 && items2.length > 1) {
                     return Integer.valueOf(items1[1]) - Integer.valueOf(items2[1]);
                 }
                 return result;

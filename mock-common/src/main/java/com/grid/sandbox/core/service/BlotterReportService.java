@@ -161,7 +161,7 @@ public class BlotterReportService<K, V extends BlotterReportRecord<K>> {
                 updated.put(changed.getRecordKey(), changed);
             }
         }
-        log.info("Processed");
+        log.info("Processed [{}]", sortedValues.size());
         return updated;
     }
 

@@ -41,6 +41,8 @@ class BlotterFeedServiceTest {
     @Captor
     private ArgumentCaptor<UpdateEvent<String, Trade>> eventCaptor;
 
+    private final String feedId = "feedId";
+
     @BeforeEach
     void setup() {
         testTrades = generateTrades();
@@ -50,7 +52,7 @@ class BlotterFeedServiceTest {
 
     @Test
     void testResetUpdateSubscription() throws Throwable {
-        feedService.getFeed(SAME_THREAD_SCHEDULER)
+        feedService.getFeed(feedId, SAME_THREAD_SCHEDULER)
                 .doOnNext(event -> log.info(event.toShortString()))
                 .subscribe(consumer);
         Trade original = testTrades.get(0);
@@ -75,7 +77,7 @@ class BlotterFeedServiceTest {
     @Test
     void testSkipPreviousVersionUpdate() throws Throwable {
         feedService.reset(testTrades);
-        feedService.getFeed(SAME_THREAD_SCHEDULER)
+        feedService.getFeed(feedId, SAME_THREAD_SCHEDULER)
                 .doOnNext(event -> log.info(event.toShortString()))
                 .subscribe(consumer);
 
@@ -96,7 +98,7 @@ class BlotterFeedServiceTest {
     @Test
     void testApplyLatestUpdate() throws Throwable {
         feedService.reset(testTrades);
-        feedService.getFeed(SAME_THREAD_SCHEDULER)
+        feedService.getFeed(feedId, SAME_THREAD_SCHEDULER)
                 .doOnNext(event -> log.info(event.toShortString()))
                 .subscribe(consumer);
 
@@ -138,7 +140,7 @@ class BlotterFeedServiceTest {
         });
 
         List<UpdateEvent<String, Trade>> allEvents = new CopyOnWriteArrayList<>();
-        feedService.getFeed(Schedulers.newThread())
+        feedService.getFeed(feedId, Schedulers.newThread())
                 .doOnNext(event -> log.info(event.toShortString()))
                 .subscribe(allEvents::add);
 
@@ -187,7 +189,7 @@ class BlotterFeedServiceTest {
         });
 
         List<UpdateEvent<String, Trade>> allEvents = new CopyOnWriteArrayList<>();
-        Disposable feedSubscription = feedService.getFeed(Schedulers.newThread())
+        Disposable feedSubscription = feedService.getFeed(feedId, Schedulers.newThread())
                 .doOnNext((event) -> {
                     log.info(event);
                     lastUpdateTime.set(System.currentTimeMillis());
