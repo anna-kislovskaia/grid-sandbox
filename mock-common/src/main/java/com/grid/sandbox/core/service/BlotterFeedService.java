@@ -55,6 +55,8 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
     public void init() {
         updateEventFlowable = snapshotFlowable.switchMap(snapshot -> {
             log.info("Snapshot updated {}", snapshot.size());
+            lastSnapshotEvent.set(null);
+            UpdateEvent<K, V> snapshotEvent = createSnapshotEvent(snapshot);
             return updateFlowable
                     .onBackpressureBuffer(updateEventBufferSize)
                     .map(updates -> {
@@ -68,7 +70,7 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
                             snapshotLock.writeLock().unlock();
                         }
                     })
-                    .startWithItem(createSnapshotEvent(snapshot))
+                    .startWithItem(snapshotEvent)
                     .filter(event -> !event.isEmpty());
                 }
         ).share();
@@ -112,7 +114,7 @@ public class BlotterFeedService<K, V extends BlotterReportRecord<K>> {
         log.info("{}: Feed requested", feedId);
         ConnectableFlowable<UpdateEvent<K, V>> eventFeed = updateEventFlowable
                 .doOnSubscribe(s -> log.info("{}: Event feed subscribed", feedId))
-                .publish(updateEventBufferSize);
+                .replay(updateEventBufferSize);
         Disposable eventFeedConnection = eventFeed.connect();
         log.info("{}: Calculate initial snapshot", feedId);
         UpdateEvent<K, V> initialSnapshot = getSnapshot();

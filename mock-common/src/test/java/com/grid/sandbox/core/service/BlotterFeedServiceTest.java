@@ -23,10 +23,8 @@ import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
-import static com.grid.sandbox.utils.TestHelpers.SAME_THREAD_SCHEDULER;
-import static com.grid.sandbox.utils.TestHelpers.generateTrades;
+import static com.grid.sandbox.utils.TestHelpers.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -96,6 +94,19 @@ class BlotterFeedServiceTest {
     }
 
     @Test
+    void testFeedReset() throws Throwable {
+        feedService.reset(testTrades);
+        feedService.getFeed(feedId, SAME_THREAD_SCHEDULER)
+                .doOnNext(event -> log.info(event.toShortString()))
+                .subscribe(consumer);
+        feedService.reset(Collections.singleton(generateNewTrade()));
+
+        verify(consumer, times(2)).accept(eventCaptor.capture());
+        List<UpdateEvent<String, Trade>> events = eventCaptor.getAllValues();
+        assertEquals(testTrades.size(), events.get(0).getUpdates().size());
+        assertEquals(1, events.get(1).getUpdates().size());
+    }
+        @Test
     void testApplyLatestUpdate() throws Throwable {
         feedService.reset(testTrades);
         feedService.getFeed(feedId, SAME_THREAD_SCHEDULER)
