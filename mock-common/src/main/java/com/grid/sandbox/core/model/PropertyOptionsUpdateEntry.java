@@ -5,8 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
-import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 @AllArgsConstructor
 @Getter
@@ -19,7 +19,7 @@ public class PropertyOptionsUpdateEntry {
 
     public PropertyOptionsUpdateEntry(String name) {
         this.name = name;
-        this.options = new HashSet<>();
+        this.options = new ConcurrentSkipListSet<>();
     }
 
     @Override

@@ -7,7 +7,6 @@ import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
@@ -26,7 +25,7 @@ public class PropertyOptionsService<K, V extends BlotterReportRecord<K>> {
     public void subscribe() {
         close();
         Disposable filterSubscription = blotterFeedService.getFeed(feedId, scheduler)
-                .filter(this::filterOptionsMightChange)
+                .filter(event -> !canApplyIncrementally(event))
                 .map(event -> {
                     log.info("{}: Recalculate property options start", feedId);
                     UpdateEvent<K, V> snapshot = event.isSnapshot() ? event : blotterFeedService.getSnapshot();
@@ -35,9 +34,7 @@ public class PropertyOptionsService<K, V extends BlotterReportRecord<K>> {
                     log.info("{}: Recalculate property options done", feedId);
                     return optionsTracker.getFilterOptions();
                 })
-                .doOnCancel(() -> {
-                    log.info("{}: Property option tracker closed", feedId);
-                })
+                .doOnCancel(() -> log.info("{}: Property option tracker closed", feedId))
                 .subscribe();
         if (!subscription.compareAndSet(null, filterSubscription)) {
             filterSubscription.dispose();
@@ -55,19 +52,22 @@ public class PropertyOptionsService<K, V extends BlotterReportRecord<K>> {
         return new ArrayList<>(optionsTracker.getFilterOptions());
     }
 
-    private boolean filterOptionsMightChange(UpdateEvent<K, V> event) {
-        Collection<PropertyOptionsUpdateEntry> currentOptions = optionsTracker.getFilterOptions();
-        return event.getType() == UpdateEvent.Type.SNAPSHOT ||
-                currentOptions.isEmpty() ||
-                event.getUpdates().stream().anyMatch(entry -> {
-                    V value = entry.getValue();
-                    // value deleted
-                    if (entry.getOldValue() != null && filter.test(entry.getOldValue()) && !filter.test(value)) {
-                        return true;
-                    }
-                    // options extended
-                    return filter.test(value) && optionsTracker.filtersChanged(value);
-                });
+    private boolean canApplyIncrementally(UpdateEvent<K, V> event) {
+        if (event.getType() == UpdateEvent.Type.SNAPSHOT) {
+            return false;
+        }
+        for (UpdateEventEntry<K, V> entry : event.getUpdates()) {
+            V value = entry.getValue();
+            // value deleted
+            if (entry.getOldValue() != null && filter.test(entry.getOldValue()) && !filter.test(value)) {
+                return false;
+            }
+            // options extended
+            if (filter.test(value) && !optionsTracker.applyIncrementally(entry.getValue(), entry.getOldValue())) {
+                return false;
+            }
+        }
+        return true;
     }
 
 }
