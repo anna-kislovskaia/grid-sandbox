@@ -16,7 +16,7 @@ public class KeyOrderedSchedulerService {
     private int threadCount = 1;
 
     @PostConstruct
-    private void init() {
+    public void init() {
         threadCount = Runtime.getRuntime().availableProcessors();
         schedulers = new Scheduler[threadCount];
         for (int index = 0; index < threadCount; index++) {

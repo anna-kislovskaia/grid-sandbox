@@ -45,4 +45,9 @@ public class UpdateEvent<K, V extends BlotterReportRecord<K>> {
     public static <K, V extends BlotterReportRecord<K>> UpdateEvent<K, V> empty() {
         return new UpdateEvent<K, V>(Collections.emptyList(), Type.INCREMENTAL);
     }
+
+    public static long getRecordVersion(BlotterReportRecord<?> record) {
+        return record == null ? 0 : record.getRecordVersion();
+    }
+
 }

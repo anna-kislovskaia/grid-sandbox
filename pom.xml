@@ -10,19 +10,19 @@
     <version>1.0-SNAPSHOT</version>
 
 	<properties>
-		<junit.version>5.7.1</junit.version>
+		<junit.version>5.8.2</junit.version>
 		<mockito.version>2.23.0</mockito.version>
 		<jsr305.version>3.0.1</jsr305.version>
-		<spring.boot.version>2.3.0.RELEASE</spring.boot.version>
-		<spring.version>5.2.6.RELEASE</spring.version>
-		<hazelcast.version>4.0.2</hazelcast.version>
-		<lombok.version>1.16.18</lombok.version>
-		<jackson.version>2.9.7</jackson.version>
-		<swagger.version>2.9.2</swagger.version>
-		<aop.version>1.9.2</aop.version>
-		<ignite.version>2.7.5</ignite.version>
-		<javax.cache.version>javax.cache.version</javax.cache.version>
-		<disruptor.version>3.3.4</disruptor.version>
+		<spring.boot.version>2.7.2</spring.boot.version>
+		<reactor.version>3.4.18</reactor.version>
+		<rxjava.version>3.0.0-RC1</rxjava.version>
+		<hazelcast.version>5.1.1</hazelcast.version>
+		<lombok.version>1.18.24</lombok.version>
+		<jackson.version>2.13.3</jackson.version>
+		<swagger.version>3.0.0</swagger.version>
+		<springdoc.version>1.6.9</springdoc.version>
+		<aop.version>1.9.9.1</aop.version>
+
 	</properties>
 
     <modules>
@@ -66,8 +66,8 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.1</version>
                     <configuration>
-                        <source>1.8</source>
-                        <target>1.8</target>
+                        <source>17</source>
+                        <target>17</target>
                         <encoding>UTF-8</encoding>
                     </configuration>
                 </plugin>

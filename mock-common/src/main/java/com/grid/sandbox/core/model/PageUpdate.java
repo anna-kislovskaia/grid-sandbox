@@ -30,7 +30,7 @@ public class PageUpdate<V> {
     private boolean snapshot;
 
     @JsonProperty
-    private List<FilterOptionUpdateEntry> filterOptions;
+    private List<PropertyOptionsUpdateEntry> filterOptions;
 
     @JsonProperty
     private int subscriptionId;

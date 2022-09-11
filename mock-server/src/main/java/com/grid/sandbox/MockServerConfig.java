@@ -21,16 +21,14 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.validation.Validator;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-import springfox.documentation.spi.DocumentationType;
-import springfox.documentation.spring.web.plugins.Docket;
-import springfox.documentation.swagger2.annotations.EnableSwagger2;
 
 import java.util.*;
 
 import static com.grid.sandbox.utils.CacheUtils.TRADE_CACHE;
 
-@EnableSwagger2
 @Configuration
 @Log4j2
 public class MockServerConfig implements WebMvcConfigurer {
@@ -96,17 +94,13 @@ public class MockServerConfig implements WebMvcConfigurer {
         return hazelcast.getReplicatedMap(TRADE_CACHE);
     }
 
-    @Bean
-    public Docket api() {
-        return new Docket(DocumentationType.SWAGGER_2);
-    }
-
     @Override
     public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
         // reset json message converter
         List<MediaType> jsonMediaTypes = new ArrayList<>();
         jsonMediaTypes.add(new MediaType("text", "event-stream"));
         jsonMediaTypes.add(new MediaType("application", "javascript"));
+        jsonMediaTypes.add(new MediaType("application", "json"));
         for (Iterator<HttpMessageConverter<?>> itr = converters.iterator(); itr.hasNext(); ) {
             HttpMessageConverter<?> converter = itr.next();
             if (converter instanceof MappingJackson2HttpMessageConverter) {

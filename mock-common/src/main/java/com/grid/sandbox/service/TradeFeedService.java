@@ -64,12 +64,4 @@ public class TradeFeedService {
                     feedService.update(updates);
                 });
     }
-
-    public Flowable<UpdateEvent<String, Trade>> getTradeFeed(Scheduler scheduler) {
-        return feedService.getFeed(scheduler);
-    }
-
-    public Flowable<UpdateEvent<String, Trade>> getTradeSnapshotFeed() {
-        return feedService.getSnapshotFeed();
-    }
 }
